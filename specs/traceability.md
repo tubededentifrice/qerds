@@ -43,6 +43,7 @@ Notes:
 | REQ-F04 | `specs/implementation/30-lifecycle-and-evidence.md`, `specs/implementation/70-storage-and-retention.md`, `specs/implementation/35-apis.md`, `specs/implementation/25-data-model.md` |
 | REQ-F05 | `specs/implementation/70-storage-and-retention.md`, `specs/implementation/25-data-model.md` |
 | REQ-F06 | `specs/implementation/20-identities-and-roles.md`, `specs/implementation/30-lifecycle-and-evidence.md`, `specs/implementation/25-data-model.md` |
+| REQ-F07 | `specs/implementation/30-lifecycle-and-evidence.md` |
 | REQ-G01 | `specs/implementation/10-claims-and-modes.md` |
 | REQ-G02 | `specs/implementation/10-claims-and-modes.md`, `specs/implementation/40-evidence-crypto-and-time.md`, `specs/implementation/45-trust-services.md` |
 | REQ-H01 | `specs/implementation/80-audit-and-conformity.md` |

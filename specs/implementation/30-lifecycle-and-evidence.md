@@ -22,6 +22,7 @@ The delivery MUST have an explicit finite state machine with monotonic transitio
 - `draft` (created but not deposited)
 - `deposited` (provider accepted submission; proof of deposit exists)
 - `notified` (initial notification issued; evidence created)
+- `notification_failed` (notification delivery failed, e.g., hard bounce; requires retry or manual handling)
 - `available` (content available for retrieval under access gate)
 - `accepted` or `refused` (recipient decision evidence)
 - `received` (recipient actually obtained content; evidence includes date/time) (REQ-B01)
@@ -35,12 +36,13 @@ For each delivery, the platform MUST produce evidence records for at least:
 
 1. `EVT_DEPOSITED` — proof of deposit (REQ-B01, REQ-F01)
 2. `EVT_NOTIFICATION_SENT` — notification issuance (REQ-C01, REQ-F02)
-3. `EVT_AVAILABLE` — when content becomes available under access controls (REQ-C01, REQ-E02)
-4. `EVT_ACCEPTED` — recipient acceptance (REQ-C01, REQ-F04)
-5. `EVT_REFUSED` — recipient refusal (REQ-C01, REQ-F04)
-6. `EVT_RECEIVED` — recipient receipt (REQ-B01, REQ-C01)
-7. `EVT_EXPIRED` — non-claim/expiry (REQ-C01, REQ-F04)
-8. `EVT_CONTENT_ACCESSED` — access audit event(s) linked to recipient identity session (REQ-E02, REQ-H10)
+3. `EVT_NOTIFICATION_FAILED` — notification failure (e.g. bounce) (REQ-C01)
+4. `EVT_AVAILABLE` — when content becomes available under access controls (REQ-C01, REQ-E02)
+5. `EVT_ACCEPTED` — recipient acceptance (REQ-C01, REQ-F04)
+6. `EVT_REFUSED` — recipient refusal (REQ-C01, REQ-F04)
+7. `EVT_RECEIVED` — recipient receipt (REQ-B01, REQ-C01)
+8. `EVT_EXPIRED` — non-claim/expiry (REQ-C01, REQ-F04)
+9. `EVT_CONTENT_ACCESSED` — access audit event(s) linked to recipient identity session (REQ-E02, REQ-H10)
 
 Each event MUST include:
 
@@ -74,6 +76,22 @@ The platform MUST treat SMTP/email as a best-effort transport and MUST NOT rely 
 - recipient address reference (e.g., salted hash) and delivery channel,
 - time attestation,
 - and any outbound message identifiers in a privacy-preserving form (e.g., hashed), without storing message body content in logs. (REQ-E03, REQ-D08)
+
+## Human-readable Evidence (PDFs)
+
+In addition to structured evidence (XML/JSON), the platform MUST generate authoritative **PDF receipts** for download by the sender/recipient, as required by CPCE (REQ-F07).
+
+Required artifacts:
+- **Preuve de Dépôt (Proof of Deposit)**: Generated at `EVT_DEPOSITED`. Contains: sender/recipient ID, time of deposit.
+- **Preuve d'Acceptation (Proof of Acceptance)**: Generated at `EVT_ACCEPTED`.
+- **Preuve de Refus (Proof of Refusal)**: Generated at `EVT_REFUSED`.
+- **Preuve de Négligence (Proof of Non-Claim)**: Generated at `EVT_EXPIRED`.
+- **Preuve de Réception (Proof of Receipt)**: Generated at `EVT_RECEIVED` (content download).
+
+These PDFs MUST:
+- Be generated from the authoritative `evidence_events` data.
+- Include a visible qualified electronic seal (or non-qualified in dev mode).
+- Include the precise timestamps from the trust service.
 
 ## Disputes and reconstruction
 

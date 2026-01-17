@@ -33,7 +33,8 @@ Non-obvious decision point (requires operator policy): the set of accepted proof
 The platform MUST enforce that only the intended recipient can access delivered content (REQ-E02):
 
 - Content access is mediated by a **recipient session** bound to a recipient identity.
-- Recipient authentication MUST be “strong enough” for the legal model and threat model; the platform MUST support operator selection of allowed mechanisms and produce an audit trail. (REQ-E02, REQ-D02)
+- Recipient authentication MUST be “strong enough” for the legal model and threat model.
+- **For LRE (CPCE) mode**: The platform MUST enforce that non-professional recipients are identified at a level equivalent to **eIDAS Substantial** (or higher), as required by CPCE R.53-3. The platform MUST support integration with appropriate IdPs (e.g., FranceConnect+ or equivalent) to satisfy this. (REQ-B03, REQ-F01)
 
 The platform MUST also support recipient-as-consumer consent to electronic LRE (REQ-F06):
 

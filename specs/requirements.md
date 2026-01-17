@@ -95,6 +95,7 @@ These apply when the service is used as an LRE under French law (CPCE).
 - **REQ-F04 (15-day acceptance window)**: The recipient MUST be able to accept/refuse the LRE for at least **15 days** from the notification, as required by CPCE.
 - **REQ-F05 (Proof of receipt retention)**: Proof of receipt and related legally required evidence MUST be retained and made available for at least the minimum duration required by CPCE (currently at least **one year** for proof of receipt).
 - **REQ-F06 (Consumer consent)**: Where the recipient is a consumer, the service MUST enforce and retain evidence of prior consent to receive LRE electronically, as required by CPCE.
+- **REQ-F07 (Human-readable proofs)**: The service MUST generate and make available human-readable evidence artifacts (e.g., PDF receipts for deposit, acceptance, refusal, negligence) compliant with the visual/content models required by CPCE/LRE practice.
 
 ### G. Truth in claims (compliance guardrail)
 

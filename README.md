@@ -45,6 +45,7 @@ Legend: ✅ implemented, ❌ not implemented.
 | REQ-F04 | CPCE: recipient has ≥ 15 days to accept/refuse | ❌ |  |
 | REQ-F05 | CPCE: proof of receipt retained/available ≥ 1 year | ❌ |  |
 | REQ-F06 | CPCE: consumer prior consent enforced and evidenced | ❌ |  |
+| REQ-F07 | CPCE: human-readable evidence (PDF receipts) generated and sealed | ❌ |  |
 | REQ-G01 | No misleading claims in docs/UI about being qualified | ❌ |  |
 | REQ-G02 | Non-qualified/dev modes clearly labeled; prevent “qualified” presentation | ❌ |  |
 
