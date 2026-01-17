@@ -8,7 +8,7 @@ When there’s any non-obvious decision or uncertainty (architecture, security m
 
 ## Scope Guardrail (for now)
 
-The user currently wants **agent instructions only**. Do not create implementation code or new specs unless explicitly requested in a later prompt.
+The user currently wants **high-level certification requirements and tracking only**. Do not implement product features unless explicitly requested.
 
 ## Hard Requirements (Project-Wide)
 
@@ -39,3 +39,14 @@ The user currently wants **agent instructions only**. Do not create implementati
 ## Compliance Guardrail
 
 Do **not** claim QERDS/LRE qualification unless *all* normative requirements are met. If any dev/stub mode exists (e.g., non-qualified signatures/timestamps), it must be clearly labeled as **non-qualified** and must not be presented as compliant.
+
+## Documentation & Tracking (CRITICAL)
+
+- `specs/requirements.md` is the single source of truth for high-level certification requirements (MUST/SHALL-level only; avoid implementation design here).
+- `README.md` contains the requirements status tables and MUST stay in sync with `specs/requirements.md`:
+  - If you add/remove/rename a requirement ID in `specs/requirements.md`, update the corresponding `README.md` table(s) in the same change.
+  - Track both categories:
+    - **Service/platform requirements** (what the service must do to be QERDS/LRE compatible).
+    - **Provider operational obligations & technical enablers** (what the operator must be able to prove, and what the platform must enable: audit packs, immutable logs, DR evidence, etc.).
+  - When implementing a requirement, flip the status from ❌ to ✅ and add a short comment (what/where), ideally pointing to code paths and tests.
+- Never mark a requirement ✅ unless it is demonstrably implemented end-to-end (code + tests + operational notes where relevant).
