@@ -20,21 +20,40 @@ Each party MAY be represented by:
 
 ## Identity assurance levels (IAL) and proofing
 
-The platform MUST track, for each sender identity:
+The platform MUST track, for each sender/recipient identity:
 
-- `ial_level`: an assurance level indicator suitable to demonstrate “very high confidence” for the chosen onboarding method (REQ-B05).
-- `proofing_method`: enumerated source (e.g., high-assurance eID, in-person ID, qualified certificate), to be aligned with applicable implementing rules/standards (REQ-B05).
-- `proofing_evidence_refs`: references to stored proofing artifacts (documents, logs, third-party assertions), protected and access-controlled.
+- `ial_level`: an assurance level indicator (e.g., `IAL_LOW`, `IAL_SUBSTANTIAL`, `IAL_HIGH`).
+- `proofing_method`: enumerated source.
 
-Non-obvious decision point (requires operator policy): the set of accepted proofing methods and what constitutes “very high” for the jurisdiction/use case. This MUST be configurable but auditable. (REQ-B05, REQ-A03)
+### Selected Proofing Strategies (REQ-B05)
+
+The platform implements an **Identity Broker** supporting three primary flows:
+
+1.  **FranceConnect+ (Primary for LRE)**:
+    -   Used to automatically assert `IAL_SUBSTANTIAL` or `IAL_HIGH`.
+    -   Required for LRE recipients (non-professional) to accept delivery (CPCE R.53-3).
+    -   Implementation: OIDC Client with specific ACR checks.
+
+2.  **Generic OIDC (eIDAS Nodes)**:
+    -   Support for external eIDAS nodes or corporate IdPs.
+    -   The platform MUST map the provider's `acr` (Authentication Context Class Reference) claims to internal IALs.
+    -   If `acr` is insufficient, the user remains at `IAL_LOW` until further verification.
+
+3.  **Manual / Operator Verification (Fallback)**:
+    -   A "Registration Authority" workflow for users lacking supported eID.
+    -   **Process**: User uploads ID documents -> "Registration Officer" (Operator staff) reviews -> Officer signs an `EVT_IDENTITY_VERIFIED` event -> User IAL is upgraded.
+    -   Strict separation of duties: Registration Officers are distinct from System Admins.
 
 ## Recipient identification and access gates
 
 The platform MUST enforce that only the intended recipient can access delivered content (REQ-E02):
 
 - Content access is mediated by a **recipient session** bound to a recipient identity.
-- Recipient authentication MUST be “strong enough” for the legal model and threat model.
-- **For LRE (CPCE) mode**: The platform MUST enforce that non-professional recipients are identified at a level equivalent to **eIDAS Substantial** (or higher), as required by CPCE R.53-3. The platform MUST support integration with appropriate IdPs (e.g., FranceConnect+ or equivalent) to satisfy this. (REQ-B03, REQ-F01)
+- **Magic Links are insufficient**: A link sent via email serves ONLY as a "Claim Token" (proof of possession of the email address). It DOES NOT grant access to the content.
+- **Authentication Wall**: Upon clicking the link, the recipient MUST authenticate (e.g., via FranceConnect+) to prove their identity matches the intended recipient (REQ-F01).
+
+**For LRE (CPCE) mode**:
+- The platform MUST enforce `IAL_SUBSTANTIAL` for the recipient before allowing "Acceptance" or "Refusal" actions.
 
 The platform MUST also support recipient-as-consumer consent to electronic LRE (REQ-F06):
 
@@ -46,11 +65,10 @@ The platform MUST also support recipient-as-consumer consent to electronic LRE (
 
 The platform MUST implement least privilege and separation of duties (REQ-D02, REQ-H06):
 
-- Role classes: `admin`, `security_officer`, `auditor`, `support`, `sender_user`, `recipient_user`, `api_client`.
+- Role classes: `admin`, `security_officer`, `auditor`, `support`, `registration_officer`, `sender_user`, `recipient_user`, `api_client`.
 - ABAC attributes (examples): organization membership, case assignment, environment, purpose-of-access.
 - Sensitive operations (evidence export, key operations, config changes) MUST require dual-control where policy requires it, and must be logged. (REQ-D02, REQ-H07)
 
 ## Identity data minimisation
 
 All outward-facing representations (notifications, verification responses) MUST minimize personal data; support redaction profiles and jurisdiction-specific templates. (REQ-E03, REQ-F02, REQ-F03)
-

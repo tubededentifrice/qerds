@@ -17,6 +17,7 @@ Primary responsibilities:
 - Delivery lifecycle state machine enforcement. (REQ-C01)
 - Evidence creation orchestration (calls trust services). (REQ-B01, REQ-C02, REQ-C03)
 - Authorization, audit logging, and export endpoints. (REQ-D02, REQ-D08, REQ-H01)
+- **Encryption Enforcement**: Handles decryption requests for authorized sessions only.
 
 ### 2) `qerds-worker` (Python, Postgres-backed job runner)
 
@@ -36,6 +37,7 @@ Primary responsibilities:
 - Produce provider attestation (seal/signature) for evidence objects. (REQ-C02)
 - Produce trustworthy time attestation (RFC3161 or other selected mechanism). (REQ-C03)
 - Encapsulate key custody and HSM/QSCD integration. (REQ-D04, REQ-H07)
+- **Key Encryption Key (KEK) Custody**: Manages the master keys used to protect data-at-rest keys.
 
 This service MUST support:
 
@@ -54,9 +56,14 @@ If QERDS interoperability with other providers is in scope, deploy:
 - `as4-gateway` — an AS4 Message Service Handler (**selected: Domibus**). (REQ-C04)
 - `smp` — an SMP/BDXR metadata publisher (**selected: phoss SMP**). (REQ-C04)
 
-### 6) Email delivery (notifications)
+### 6) Email delivery (notifications & LRE)
 
 Notifications are a transport mechanism; compliance-relevant evidence is generated and retained by the platform (e.g., `EVT_NOTIFICATION_SENT`), not by the SMTP provider. (REQ-C01, REQ-F02)
+
+**Pickup Portal Strategy**:
+- For LRE, email serves ONLY as a notification containing a "Claim Token" (Magic Link).
+- The link directs the user to the `qerds-api` hosted **Pickup Portal**.
+- **No Direct Access**: The link MUST NOT grant access to the content/sender-identity directly. The user MUST authenticate (FranceConnect+) to proceed.
 
 Configuration requirement:
 
