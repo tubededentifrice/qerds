@@ -50,6 +50,7 @@ pnpm-debug.log*
 # Local env/secrets (never commit)
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.p12
@@ -66,4 +67,3 @@ storage/
 # Databases (should not be used in prod here, but keep local artifacts out of git)
 *.sqlite
 *.sqlite3
-

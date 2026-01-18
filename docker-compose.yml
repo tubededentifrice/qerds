@@ -24,6 +24,50 @@ services:
       retries: 3
       start_period: 10s
 
+  # Internal OCI registry (for air-gapped tooling like Trivy DB mirroring).
+  #
+  # Enabled only when explicitly requested:
+  #   docker compose --profile security-tools up
+  registry-auth-init:
+    image: httpd:2.4-alpine
+    profiles: ["security-tools"]
+    environment:
+      - QERDS_REGISTRY_USER
+      - QERDS_REGISTRY_PASSWORD
+    command:
+      - sh
+      - -ec
+      - |
+        if [ -z "${QERDS_REGISTRY_USER:-}" ] || [ -z "${QERDS_REGISTRY_PASSWORD:-}" ]; then
+          echo "Missing QERDS_REGISTRY_USER/QERDS_REGISTRY_PASSWORD (see .env.example)" >&2
+          exit 1
+        fi
+        if [ ! -f /auth/htpasswd ]; then
+          htpasswd -Bbn "${QERDS_REGISTRY_USER}" "${QERDS_REGISTRY_PASSWORD}" > /auth/htpasswd
+          chmod 0600 /auth/htpasswd
+        fi
+    volumes:
+      - registry_auth:/auth
+    restart: "no"
+
+  registry:
+    image: registry:2
+    profiles: ["security-tools"]
+    depends_on:
+      registry-auth-init:
+        condition: service_completed_successfully
+    environment:
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: qerds-registry
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+    volumes:
+      - registry_data:/var/lib/registry
+      - registry_auth:/auth:ro
+    # No host port published by default. Access from inside the compose network:
+    #   http://registry:5000
+
   # Future services (placeholders for full QERDS implementation)
   # Uncomment when implementing backend
 
@@ -69,9 +113,12 @@ services:
   #     MP_SMTP_AUTH_ACCEPT_ANY: 1
   #     MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
-# volumes:
-#   postgres_data:
-#   minio_data:
+volumes:
+  registry_data:
+  registry_auth:
+  # Future volumes (uncomment when enabling services above)
+  # postgres_data:
+  # minio_data:
 
 networks:
   default:
