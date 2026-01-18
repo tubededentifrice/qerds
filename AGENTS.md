@@ -22,13 +22,25 @@ When there’s any non-obvious decision or uncertainty (architecture, security m
 ### Backend dependencies
 - Prefer Python standard library.
 - Small frameworks are allowed (user approved), but keep external deps minimal and justified.
-- If cryptography libraries are needed, prefer minimal, well-audited choices and document why they’re required.
+- If cryptography libraries are needed, prefer minimal, well-audited choices and document why they're required.
+- **Always use latest stable versions**: When adding dependencies, always specify the latest stable version. Check PyPI/npm before adding any dependency. Pin exact versions in requirements files for reproducibility.
 
 ## Code Quality
 - Use type hints everywhere.
 - Keep functions small and focused.
 - Write docstrings for public functions.
 - Keep documentation DRY: reference code paths instead of duplicating schemas/behaviors in prose.
+
+### Frontend CSS Guidelines (Strictly Enforced)
+- **Semantic class names**: Use classes that describe the element's purpose, not its appearance (e.g., `.delivery-card`, `.pickup-hero`, not `.blue-box`, `.large-text`)
+- **CSS must be minimal**:
+  - Use CSS variables for all colors, spacing, typography (defined in `:root`)
+  - Target multiple elements in the same CSS block when they share styles
+  - Avoid inline styles in templates; use classes instead
+  - Group related selectors (e.g., `.btn--primary, .btn--secondary { ... }`)
+- **No utility class proliferation**: Unlike Tailwind, avoid creating many single-purpose utility classes. Use semantic classes that encapsulate related styles.
+- **Match the mocks**: Implementation must visually match the UI mocks in `mocks/`. Do not deviate from the design without explicit approval.
+- **Reuse existing patterns**: Before creating new CSS, check if an existing class can be reused or extended.
 
 ### DRY (Don't Repeat Yourself) - Strictly Enforced
 - **No copy-paste code**: If you're copying code, extract it into a shared function/module
@@ -42,6 +54,13 @@ When there’s any non-obvious decision or uncertainty (architecture, security m
 - **Target**: 90% coverage
 - New code should have tests before merging
 - Critical paths (crypto, auth, evidence handling) should aim for 95%+
+- **Tests must run in Docker**: All tests must run against Docker containers for reproducibility. Use `docker compose exec` or similar for running tests.
+
+### Code Formatting & Linting
+- **Ruff is mandatory**: Use `ruff` for both formatting (`ruff format`) and linting (`ruff check`). No other formatters/linters.
+- Run `ruff check --fix` to auto-fix issues where possible
+- Pre-commit hooks must enforce ruff
+- CI must fail on ruff violations
 
 ## Beads (bd) Issue Tracking
 
