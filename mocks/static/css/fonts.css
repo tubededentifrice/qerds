@@ -1,0 +1,92 @@
+/* ==========================================================================
+   QERDS Typography - Self-Hosted Fonts
+
+   To install fonts (one-time setup):
+   1. Download Source Sans 3 from: https://fonts.google.com/specimen/Source+Sans+3
+   2. Download Spectral from: https://fonts.google.com/specimen/Spectral
+   3. Convert to WOFF2 format and place in /static/fonts/
+
+   Until fonts are installed, the system will fall back to system fonts.
+   ========================================================================== */
+
+/* Source Sans 3 - Primary UI font (similar to French government's Marianne) */
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: normal;
+    font-weight: 300;
+    font-display: swap;
+    src: local('Source Sans 3 Light'),
+         local('SourceSans3-Light'),
+         url('/static/fonts/SourceSans3-Light.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: local('Source Sans 3 Regular'),
+         local('SourceSans3-Regular'),
+         url('/static/fonts/SourceSans3-Regular.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: local('Source Sans 3 Medium'),
+         local('SourceSans3-Medium'),
+         url('/static/fonts/SourceSans3-Medium.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: local('Source Sans 3 SemiBold'),
+         local('SourceSans3-SemiBold'),
+         url('/static/fonts/SourceSans3-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: local('Source Sans 3 Bold'),
+         local('SourceSans3-Bold'),
+         url('/static/fonts/SourceSans3-Bold.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: local('Source Sans 3 Italic'),
+         local('SourceSans3-Italic'),
+         url('/static/fonts/SourceSans3-Italic.woff2') format('woff2');
+}
+
+/* Spectral - Display headings (editorial contrast) */
+@font-face {
+    font-family: 'Spectral';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: local('Spectral Medium'),
+         local('Spectral-Medium'),
+         url('/static/fonts/Spectral-Medium.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Spectral';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: local('Spectral SemiBold'),
+         local('Spectral-SemiBold'),
+         url('/static/fonts/Spectral-SemiBold.woff2') format('woff2');
+}

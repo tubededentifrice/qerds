@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}QERDS{% endblock %} - Service de Lettre Recommandée Électronique</title>
+    <link rel="preconnect" href="/static/fonts/">
+    <link rel="stylesheet" href="/static/css/fonts.css">
+    <link rel="stylesheet" href="/static/css/main.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="qerds-body {% block body_class %}{% endblock %}">
+    {% if qualification_mode == 'dev' %}
+    {% include 'partials/dev_banner.html' %}
+    {% endif %}
+
+    {% block header %}
+    <header class="qerds-header">
+        <div class="header-container">
+            <a href="/" class="header-brand">
+                <div class="brand-logo">
+                    <svg class="logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="8" width="40" height="32" rx="2" stroke="currentColor" stroke-width="2.5"/>
+                        <path d="M4 14L24 28L44 14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                        <circle cx="38" cy="14" r="6" fill="#E1000F"/>
+                        <path d="M38 11V17M38 17L35 14M38 17L41 14" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-name">QERDS</span>
+                    <span class="brand-tagline">Lettre Recommandée Électronique Qualifiée</span>
+                </div>
+            </a>
+
+            {% block nav %}
+            <nav class="header-nav" aria-label="Navigation principale">
+                {% if user %}
+                <ul class="nav-list">
+                    {% if user.role == 'sender' %}
+                    <li><a href="/sender/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Tableau de bord</a></li>
+                    <li><a href="/sender/new" class="nav-link {% if active_page == 'new' %}active{% endif %}">Nouvel envoi</a></li>
+                    <li><a href="/sender/history" class="nav-link {% if active_page == 'history' %}active{% endif %}">Historique</a></li>
+                    {% elif user.role == 'admin' %}
+                    <li><a href="/admin/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Tableau de bord</a></li>
+                    <li><a href="/admin/audit" class="nav-link {% if active_page == 'audit' %}active{% endif %}">Audit</a></li>
+                    <li><a href="/admin/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Configuration</a></li>
+                    {% endif %}
+                </ul>
+                {% endif %}
+            </nav>
+            {% endblock %}
+
+            <div class="header-actions">
+                {% if user %}
+                <div class="user-menu">
+                    <button class="user-menu-trigger" aria-expanded="false" aria-haspopup="true">
+                        <span class="user-avatar">{{ user.initials }}</span>
+                        <span class="user-name">{{ user.name }}</span>
+                        <svg class="chevron-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                        </svg>
+                    </button>
+                    <div class="user-dropdown" hidden>
+                        <a href="/account" class="dropdown-item">Mon compte</a>
+                        <a href="/logout" class="dropdown-item dropdown-item--danger">Déconnexion</a>
+                    </div>
+                </div>
+                {% else %}
+                <a href="/login" class="btn btn--primary btn--sm">Se connecter</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+    {% endblock %}
+
+    <main class="qerds-main" id="main-content">
+        {% block main %}{% endblock %}
+    </main>
+
+    {% block footer %}
+    <footer class="qerds-footer">
+        <div class="footer-container">
+            <div class="footer-top">
+                <div class="footer-brand">
+                    <span class="footer-logo">QERDS</span>
+                    <p class="footer-description">Service de Lettre Recommandée Électronique Qualifiée conforme au règlement eIDAS et au Code des Postes et Communications Électroniques.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Service</h4>
+                        <ul>
+                            <li><a href="/about">À propos</a></li>
+                            <li><a href="/help">Aide</a></li>
+                            <li><a href="/contact">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Légal</h4>
+                        <ul>
+                            <li><a href="/legal/terms">Conditions d'utilisation</a></li>
+                            <li><a href="/legal/privacy">Politique de confidentialité</a></li>
+                            <li><a href="/legal/cookies">Gestion des cookies</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-column">
+                        <h4 class="footer-heading">Conformité</h4>
+                        <ul>
+                            <li><a href="/compliance/eidas">Certification eIDAS</a></li>
+                            <li><a href="/compliance/arcep">Enregistrement ARCEP</a></li>
+                            <li><a href="/verify">Vérification de preuves</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-legal">© {{ current_year }} QERDS - Tous droits réservés</p>
+                <p class="footer-compliance">
+                    {% if qualification_mode == 'qualified' %}
+                    <span class="compliance-badge compliance-badge--qualified">
+                        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+                        Service Qualifié eIDAS
+                    </span>
+                    {% else %}
+                    <span class="compliance-badge compliance-badge--dev">
+                        Mode développement - Non qualifié
+                    </span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </footer>
+    {% endblock %}
+
+    <script src="/static/js/main.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Vérification de preuve{% endblock %}
+
+{% block main %}
+<div class="container verify-page">
+    <header class="page-header text-center">
+        <h1 class="page-title">Vérification de preuve</h1>
+        <p class="page-description" style="margin-inline: auto;">
+            Vérifiez l'authenticité d'une preuve de lettre recommandée électronique
+        </p>
+    </header>
+
+    <!-- Verification Form -->
+    <section class="verify-form">
+        <form action="/verify" method="GET">
+            <div class="form-group">
+                <label for="proof_id" class="form-label form-label--required">Identifiant de la preuve</label>
+                <input type="text" id="proof_id" name="id" class="form-input"
+                       placeholder="ex: PRF-2024-XXXX-XXXX-XXXX"
+                       value="{{ proof_id or '' }}"
+                       required>
+                <p class="form-hint">L'identifiant se trouve sur votre document de preuve</p>
+            </div>
+
+            <div class="form-group">
+                <label for="verification_token" class="form-label form-label--required">Jeton de vérification</label>
+                <input type="text" id="verification_token" name="token" class="form-input"
+                       placeholder="ex: ABCD-1234-EFGH-5678"
+                       value="{{ token or '' }}"
+                       required>
+                <p class="form-hint">Le jeton de vérification accompagne l'identifiant sur votre preuve</p>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--block btn--lg mt-6">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                </svg>
+                Vérifier l'authenticité
+            </button>
+        </form>
+    </section>
+
+    <!-- Verification Result (shown when result exists) -->
+    {% if result %}
+    <section class="verify-result" aria-live="polite">
+        <div class="verify-result-card">
+            {% if result.valid %}
+            <header class="verify-result-header verify-result-header--valid">
+                <svg class="verify-result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+                <div>
+                    <p class="verify-result-status">Preuve authentique</p>
+                    <p style="font-size: var(--text-sm); color: #065f46; margin-top: var(--space-1);">
+                        La signature cryptographique et l'horodatage sont valides
+                    </p>
+                </div>
+            </header>
+            {% else %}
+            <header class="verify-result-header verify-result-header--invalid">
+                <svg class="verify-result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <div>
+                    <p class="verify-result-status">Vérification échouée</p>
+                    <p style="font-size: var(--text-sm); color: #991b1b; margin-top: var(--space-1);">
+                        {{ result.error or 'La preuve n\'a pas pu être vérifiée' }}
+                    </p>
+                </div>
+            </header>
+            {% endif %}
+
+            {% if result.valid %}
+            <div class="verify-result-body">
+                <div class="verify-detail-grid">
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Type de preuve</span>
+                        <span class="verify-detail-value">{{ result.proof_type }}</span>
+                    </div>
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Date d'émission</span>
+                        <span class="verify-detail-value">{{ result.issued_at }}</span>
+                    </div>
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Référence de l'envoi</span>
+                        <span class="verify-detail-value verify-detail-value--mono">{{ result.delivery_id }}</span>
+                    </div>
+
+                    {% if result.show_parties %}
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Expéditeur</span>
+                        <span class="verify-detail-value">{{ result.sender_name }}</span>
+                    </div>
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Destinataire</span>
+                        <span class="verify-detail-value">{{ result.recipient_name }}</span>
+                    </div>
+                    {% else %}
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Parties</span>
+                        <div class="redacted-info" style="margin-top: var(--space-1);">
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z"/>
+                                <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z"/>
+                            </svg>
+                            <span>Identités masquées (envoi en cours)</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Algorithme de signature</span>
+                        <span class="verify-detail-value verify-detail-value--mono">{{ result.signature_algorithm or 'ECDSA-P384-SHA384' }}</span>
+                    </div>
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Autorité d'horodatage</span>
+                        <span class="verify-detail-value">{{ result.tsa_name or 'Chronosign (Qualifié eIDAS)' }}</span>
+                    </div>
+
+                    <div class="verify-detail-item">
+                        <span class="verify-detail-label">Empreinte du document</span>
+                        <span class="verify-detail-value verify-detail-value--mono" style="font-size: var(--text-xs);">{{ result.document_hash }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Help Section -->
+    <section class="card mt-8">
+        <div class="card-body">
+            <h2 style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+                Comment vérifier une preuve ?
+            </h2>
+            <div style="display: grid; gap: var(--space-4);">
+                <div style="display: flex; gap: var(--space-4);">
+                    <div style="width: 2rem; height: 2rem; background: rgba(0, 0, 145, 0.08); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--color-primary); font-weight: var(--font-semibold);">1</div>
+                    <div>
+                        <p style="font-weight: var(--font-medium);">Localisez les identifiants</p>
+                        <p style="font-size: var(--text-sm); color: var(--text-secondary);">Sur votre preuve PDF, trouvez l'identifiant et le jeton de vérification en bas du document.</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: var(--space-4);">
+                    <div style="width: 2rem; height: 2rem; background: rgba(0, 0, 145, 0.08); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--color-primary); font-weight: var(--font-semibold);">2</div>
+                    <div>
+                        <p style="font-weight: var(--font-medium);">Saisissez les informations</p>
+                        <p style="font-size: var(--text-sm); color: var(--text-secondary);">Entrez l'identifiant et le jeton dans le formulaire ci-dessus.</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: var(--space-4);">
+                    <div style="width: 2rem; height: 2rem; background: rgba(0, 0, 145, 0.08); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--color-primary); font-weight: var(--font-semibold);">3</div>
+                    <div>
+                        <p style="font-weight: var(--font-medium);">Consultez le résultat</p>
+                        <p style="font-size: var(--text-sm); color: var(--text-secondary);">La vérification cryptographique confirme l'authenticité et l'intégrité de la preuve.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <p class="text-center mt-6" style="font-size: var(--text-sm); color: var(--text-tertiary);">
+        Ce service est conforme au règlement eIDAS et au CPCE.<br>
+        <a href="/help/verification">En savoir plus sur la vérification des preuves</a>
+    </p>
+</div>
+{% endblock %}
