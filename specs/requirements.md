@@ -123,3 +123,12 @@ These requirements are still high level: they describe *outcomes and artifacts* 
 
 - **REQ-I01 (Backend/Frontend Separation)**: The system MUST maintain a clear architectural separation between the backend (certified core) and the frontend (within the same repository). The architecture MUST ensure that the frontend can be updated independently without invalidating the certification of the backend logic (not applicable until actually certified).
 - **REQ-I02 (Backend Enforcement)**: All normative requirements and security controls that are possible to enforce on the backend MUST be enforced there (treating the frontend as an untrusted client) to ensure compliance regardless of frontend changes.
+
+### J. Project specifications (non-normative)
+
+The following are **project-level specifications**, not legal or certification requirements. They represent decisions made for this project's scope and target markets.
+
+#### Internationalization (i18n)
+
+- **SPEC-J01 (i18n from day 1)**: The platform MUST support internationalization from the start. All user-facing text (UI, notifications, evidence artifacts, error messages) MUST be externalized for translation.
+- **SPEC-J02 (French and English)**: The platform MUST support at minimum **French** and **English** languages for all user-facing content.

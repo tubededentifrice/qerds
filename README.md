@@ -70,3 +70,14 @@ Legend: ✅ implemented, ❌ not implemented.
 |---|---|---|---|
 | REQ-I01 | Clear backend/frontend separation; frontend updates don't invalidate backend cert | ❌ | Not applicable until certified |
 | REQ-I02 | All possible requirements enforced on backend (frontend = untrusted) | ❌ |  |
+
+### Project specifications (non-normative)
+
+These are project-level decisions, not legal or certification requirements.
+
+#### Internationalization (i18n)
+
+| Spec ID | Specification | Implemented | Comment |
+|---|---|---|---|
+| SPEC-J01 | i18n from day 1; all user-facing text externalized for translation | ❌ |  |
+| SPEC-J02 | French and English supported for all user-facing content | ❌ |  |
