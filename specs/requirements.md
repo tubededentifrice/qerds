@@ -118,3 +118,8 @@ These requirements are still high level: they describe *outcomes and artifacts* 
 - **REQ-H08 (Business continuity evidence)**: The platform MUST support backup/restore and disaster recovery exercises with verifiable results (e.g., restore test logs, recovery time evidence) suitable for audits.
 - **REQ-H09 (Vulnerability management evidence)**: The platform MUST enable producing audit-ready evidence of vulnerability management activities required for the service (scan/pentest reports, remediation tracking, and exceptions), without relying on third-party hosted providers.
 - **REQ-H10 (Customer support and disputes evidence)**: The platform MUST support producing dispute-resolution artifacts (item timeline reconstruction, evidence chain verification outputs, and controlled disclosure exports) while respecting confidentiality and data minimisation.
+
+### I. System Architecture and Certification Maintenance
+
+- **REQ-I01 (Backend/Frontend Separation)**: The system MUST maintain a clear architectural separation between the backend (certified core) and the frontend (within the same repository). The architecture MUST ensure that the frontend can be updated independently without invalidating the certification of the backend logic (not applicable until actually certified).
+- **REQ-I02 (Backend Enforcement)**: All normative requirements and security controls that are possible to enforce on the backend MUST be enforced there (treating the frontend as an untrusted client) to ensure compliance regardless of frontend changes.

@@ -63,3 +63,10 @@ Legend: ✅ implemented, ❌ not implemented.
 | REQ-H08 | Backup/restore + DR exercise evidence suitable for audits | ❌ |  |
 | REQ-H09 | Vulnerability management evidence (scan/pentest/remediation tracking) | ❌ |  |
 | REQ-H10 | Disputes/support evidence (timeline reconstruction, controlled exports) | ❌ |  |
+
+### System Architecture and Certification Maintenance
+
+| Requirement ID | Requirement (high level) | Implemented | Comment |
+|---|---|---|---|
+| REQ-I01 | Clear backend/frontend separation; frontend updates don't invalidate backend cert | ❌ | Not applicable until certified |
+| REQ-I02 | All possible requirements enforced on backend (frontend = untrusted) | ❌ |  |
