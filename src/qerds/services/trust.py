@@ -175,6 +175,9 @@ class SealedData:
     Per REQ-H01, the verification bundle must include all material
     needed to verify the seal independently.
 
+    Per REQ-G02, includes qualification_label and qualification_basis_ref
+    to clearly indicate whether this seal is qualified or non-qualified.
+
     Attributes:
         seal_id: Unique identifier for this seal operation.
         signature: Base64-encoded CMS/PKCS#7 signature.
@@ -183,8 +186,9 @@ class SealedData:
         certificate_chain: List of PEM-encoded certificates.
         sealed_at: Timestamp of sealing operation.
         content_hash: Hash of the sealed content.
-        qualification_label: Qualification status of the seal.
+        qualification_label: Qualification status of the seal (qualified/non_qualified).
         policy_snapshot_id: Reference to policy snapshot at seal time.
+        qualification_basis_ref: Reference to qualification dossier (only if qualified).
     """
 
     seal_id: str
@@ -196,10 +200,11 @@ class SealedData:
     content_hash: str
     qualification_label: QualificationMode
     policy_snapshot_id: str
+    qualification_basis_ref: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses and storage."""
-        return {
+        result = {
             "seal_id": self.seal_id,
             "signature": self.signature,
             "algorithm_suite": {
@@ -215,6 +220,10 @@ class SealedData:
             "qualification_label": self.qualification_label.value,
             "policy_snapshot_id": self.policy_snapshot_id,
         }
+        # Only include qualification_basis_ref if present (qualified mode)
+        if self.qualification_basis_ref:
+            result["qualification_basis_ref"] = self.qualification_basis_ref
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +234,9 @@ class TimestampToken:
     In non-qualified mode, we produce a signed timestamp structure
     that mirrors RFC 3161 semantics but is clearly labeled.
 
+    Per REQ-G02, includes qualification_label and qualification_basis_ref
+    to clearly indicate whether this timestamp is qualified or non-qualified.
+
     Attributes:
         token_id: Unique identifier for this timestamp.
         timestamp: The attested time.
@@ -234,8 +246,9 @@ class TimestampToken:
         tsa_name: Name of the timestamp authority.
         signature: Base64-encoded timestamp signature.
         policy_oid: Timestamp policy OID.
-        qualification_label: Qualification status.
+        qualification_label: Qualification status (qualified/non_qualified).
         accuracy_seconds: Accuracy of the timestamp in seconds.
+        qualification_basis_ref: Reference to qualification dossier (only if qualified).
     """
 
     token_id: str
@@ -248,10 +261,11 @@ class TimestampToken:
     policy_oid: str
     qualification_label: QualificationMode
     accuracy_seconds: int = 1
+    qualification_basis_ref: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
-        return {
+        result = {
             "token_id": self.token_id,
             "timestamp": self.timestamp.isoformat(),
             "message_imprint": self.message_imprint,
@@ -263,6 +277,10 @@ class TimestampToken:
             "qualification_label": self.qualification_label.value,
             "accuracy_seconds": self.accuracy_seconds,
         }
+        # Only include qualification_basis_ref if present (qualified mode)
+        if self.qualification_basis_ref:
+            result["qualification_basis_ref"] = self.qualification_basis_ref
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -609,12 +627,35 @@ class TrustServiceError(Exception):
 
 
 class QualifiedModeNotImplementedError(TrustServiceError):
-    """Raised when qualified mode operations are attempted."""
+    """Raised when qualified mode operations are attempted without HSM.
 
-    def __init__(self) -> None:
+    Per REQ-B04 and REQ-D04, qualified mode requires HSM integration
+    and must fail closed if prerequisites are not met.
+    """
+
+    def __init__(self, operation: str = "initialize") -> None:
         super().__init__(
-            "Qualified mode requires HSM integration via PKCS#11. "
-            "This is not yet implemented. Use non_qualified mode for development."
+            f"Qualified mode operation '{operation}' failed: HSM integration via PKCS#11 "
+            "is required but not yet implemented. Per REQ-B04, qualified mode must fail "
+            "closed when prerequisites are not met. Use non_qualified mode for development."
+        )
+        self.operation = operation
+
+
+class QualifiedPrerequisitesNotMetError(TrustServiceError):
+    """Raised when qualified operation attempted without prerequisites.
+
+    This is the fail-closed behavior per REQ-B04: operations that require
+    qualified mode must fail if prerequisites are not satisfied.
+    """
+
+    def __init__(self, operation: str, missing_prerequisites: list[str]) -> None:
+        self.operation = operation
+        self.missing_prerequisites = missing_prerequisites
+        super().__init__(
+            f"Qualified mode operation '{operation}' blocked: prerequisites not met. "
+            f"Missing: {', '.join(missing_prerequisites)}. "
+            "This is fail-closed behavior per REQ-B04."
         )
 
 
@@ -711,11 +752,19 @@ class TrustService:
         )
     """
 
-    def __init__(self, config: TrustServiceConfig) -> None:
+    def __init__(
+        self,
+        config: TrustServiceConfig,
+        *,
+        qualified_mode_enforcer: Any | None = None,
+    ) -> None:
         """Initialize the trust service.
 
         Args:
             config: Service configuration.
+            qualified_mode_enforcer: Optional QualifiedModeEnforcer for prerequisite checking.
+                When provided and running in qualified mode, operations will call
+                enforce_prerequisites() before proceeding. See qualified_mode.py.
         """
         self._config = config
         self._keys: dict[str, ManagedKey] = {}
@@ -724,6 +773,8 @@ class TrustService:
         self._algorithm_suite = AlgorithmSuite.default()
         # Storage for ceremony logs (in-memory; production would use DB/storage)
         self._ceremony_logs: dict[str, KeyCeremonyLog] = {}
+        # Optional qualified mode enforcer for prerequisite checking
+        self._qualified_mode_enforcer = qualified_mode_enforcer
 
     @property
     def mode(self) -> QualificationMode:
@@ -793,8 +844,13 @@ class TrustService:
 
         Raises:
             TrustServiceError: If service not initialized or signing fails.
+            QualifiedModeNotReadyError: If in qualified mode and prerequisites not met.
         """
         self._ensure_initialized()
+
+        # Enforce qualified mode prerequisites if enforcer is configured
+        if self._qualified_mode_enforcer is not None:
+            self._qualified_mode_enforcer.enforce_prerequisites("seal")
 
         signing_key = self._get_active_key(KeyPurpose.SIGNING)
         seal_id = f"seal-{uuid.uuid4()}"
@@ -850,8 +906,13 @@ class TrustService:
 
         Raises:
             TrustServiceError: If service not initialized.
+            QualifiedModeNotReadyError: If in qualified mode and prerequisites not met.
         """
         self._ensure_initialized()
+
+        # Enforce qualified mode prerequisites if enforcer is configured
+        if self._qualified_mode_enforcer is not None:
+            self._qualified_mode_enforcer.enforce_prerequisites("timestamp")
 
         tsa_key = self._get_active_key(KeyPurpose.TIMESTAMPING)
         token_id = f"tst-{uuid.uuid4()}"
