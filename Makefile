@@ -1,7 +1,7 @@
 # QERDS Development Makefile
 # All commands should be run via Docker for reproducibility
 
-.PHONY: help install lint format typecheck test test-cov clean check-traceability
+.PHONY: help install lint format typecheck test test-cov clean check-traceability check-network check-network-prod
 
 # Default target
 help:
@@ -28,6 +28,8 @@ help:
 	@echo ""
 	@echo "Compliance:"
 	@echo "  make check-traceability  Validate requirements traceability coverage"
+	@echo "  make check-network       Validate network security posture (REQ-D07)"
+	@echo "  make check-network-prod  Validate network security (production mode)"
 
 # Local development targets
 install:
@@ -78,6 +80,13 @@ docker-check: docker-lint docker-format-check docker-typecheck docker-test
 # Compliance targets (REQ-A04)
 check-traceability:
 	@python3 scripts/check-traceability.py
+
+# Network security validation (REQ-D07)
+check-network:
+	@python3 scripts/check-network-security.py
+
+check-network-prod:
+	@python3 scripts/check-network-security.py --production
 
 # Cleanup
 clean:
