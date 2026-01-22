@@ -487,6 +487,93 @@ class StorageStats(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# Conformity Package Schemas (REQ-A02)
+# -----------------------------------------------------------------------------
+
+
+class ConformityPackageRequest(BaseModel):
+    """Request schema for generating a conformity assessment package.
+
+    Conformity packages are comprehensive exports containing all material
+    needed for auditors performing QERDS/LRE certification assessments.
+    """
+
+    assessment_type: str = Field(
+        ...,
+        pattern=r"^(initial|periodic|ad-hoc|recertification)$",
+        description="Type of assessment (initial, periodic, ad-hoc, recertification)",
+    )
+    include_evidence_samples: bool = Field(
+        True, description="Include sample evidence events in the package"
+    )
+    include_key_ceremonies: bool = Field(True, description="Include key lifecycle ceremony events")
+    reason: str = Field(
+        ...,
+        min_length=10,
+        max_length=500,
+        description="Reason for generating the package (for audit trail)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class TraceabilityEntryResponse(BaseModel):
+    """Response schema for a single traceability matrix entry."""
+
+    requirement_id: str = Field(..., description="Requirement identifier (e.g., REQ-A01)")
+    title: str = Field(..., description="Human-readable requirement title")
+    category: str = Field(..., description="Requirement category")
+    modules: list[str] = Field(default_factory=list, description="Implementation module paths")
+    tests: list[str] = Field(default_factory=list, description="Test file paths")
+    evidence: list[str] = Field(default_factory=list, description="Evidence artifact descriptions")
+    implementation_status: str = Field(..., description="Current implementation status")
+
+
+class PolicyDocumentResponse(BaseModel):
+    """Response schema for a policy document reference."""
+
+    doc_id: str = Field(..., description="Document identifier")
+    title: str = Field(..., description="Document title")
+    path: str = Field(..., description="Path to document in repository")
+    publication_status: str = Field(..., description="Publication status (published/internal)")
+    content_hash: str = Field(..., description="SHA-256 hash of document content")
+    last_modified: datetime | None = Field(None, description="Last modification timestamp")
+
+
+class ConformityPackageResponse(BaseModel):
+    """Response schema for conformity package generation."""
+
+    package_id: UUID = Field(..., description="Unique identifier for the package")
+    assessment_type: str = Field(..., description="Type of assessment")
+    created_at: datetime = Field(..., description="When the package was generated")
+    created_by: str = Field(..., description="Admin user who created the package")
+    requirement_count: int = Field(0, description="Number of requirements in traceability matrix")
+    policy_document_count: int = Field(0, description="Number of policy documents")
+    evidence_sample_count: int = Field(0, description="Number of evidence samples")
+    config_snapshot_count: int = Field(0, description="Number of configuration snapshots")
+    key_count: int = Field(0, description="Number of keys in inventory")
+    ceremony_event_count: int = Field(0, description="Number of key ceremony events")
+    package_hash: str = Field(..., description="SHA-256 hash of the package contents")
+    storage_ref: str = Field(..., description="Reference to stored package")
+    qualification_label: str = Field(
+        ..., description="Qualification status (qualified/non_qualified)"
+    )
+
+
+class TraceabilityMatrixResponse(BaseModel):
+    """Response schema for traceability matrix export."""
+
+    generated_at: datetime = Field(..., description="When the matrix was generated")
+    generated_by: str = Field(..., description="Admin user who requested the matrix")
+    total_requirements: int = Field(..., description="Total number of requirements")
+    by_category: dict[str, int] = Field(default_factory=dict, description="Count by category")
+    by_status: dict[str, int] = Field(
+        default_factory=dict, description="Count by implementation status"
+    )
+    entries: list[TraceabilityEntryResponse] = Field(..., description="All traceability entries")
+
+
+# -----------------------------------------------------------------------------
 # Common Response Schemas
 # -----------------------------------------------------------------------------
 
