@@ -3,7 +3,7 @@
 
 .PHONY: help install lint format typecheck test test-cov clean check-traceability \
        test-env-up test-env-down test-env-status test-docker test-docker-cov \
-       check-network check-network-prod
+       check-network check-network-prod check-boundaries
 
 # Default target
 help:
@@ -39,6 +39,7 @@ help:
 	@echo "  make check-traceability  Validate requirements traceability coverage"
 	@echo "  make check-network       Validate network security posture (REQ-D07)"
 	@echo "  make check-network-prod  Validate network security (production mode)"
+	@echo "  make check-boundaries    Validate backend/frontend separation (REQ-I01)"
 
 # Local development targets
 install:
@@ -135,6 +136,10 @@ check-network:
 
 check-network-prod:
 	@python3 scripts/check-network-security.py --production
+
+# Architecture boundary validation (REQ-I01)
+check-boundaries:
+	@python3 scripts/check_boundaries.py
 
 # Cleanup
 clean:

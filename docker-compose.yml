@@ -11,6 +11,20 @@
 #   - qerds-api: FastAPI application
 #   - qerds-worker: Background job runner
 #   - qerds-trust: Signing/timestamping service
+#
+# Architecture Note (REQ-I01 - Backend/Frontend Separation):
+# The qerds-api service contains both backend logic and frontend assets
+# in a single image. The separation is enforced at the code level:
+#
+#   - Certified Core (Backend): src/qerds/services/, trust/, db/, worker/
+#   - Frontend Assets: src/qerds/templates/, static/, locales/
+#   - API Layer (Boundary): src/qerds/api/
+#
+# Frontend assets are served by FastAPI's StaticFiles middleware. If needed
+# for compliance or operational reasons, the architecture supports separation
+# into distinct containers (API + nginx for static assets).
+#
+# See: specs/implementation/95-architecture-boundaries.md
 
 services:
   # --------------------------------------------------------------------------
