@@ -43,10 +43,10 @@ from qerds.api.schemas.admin import (
     TimelineEventSummary,
     UserStats,
 )
-from qerds.db.models.base import AuditStream, QualificationLabel
+from qerds.db.models.base import QualificationLabel
 from qerds.db.models.deliveries import ContentObject, Delivery
 from qerds.db.models.evidence import EvidenceEvent, EvidenceObject, PolicySnapshot
-from qerds.services.audit_log import AuditLogService
+from qerds.services.audit_pack import AuditPackService
 from qerds.services.security_events import SecurityActor, SecurityEventLogger
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,33 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 # Require admin_user role for all admin endpoints
 AdminUser = Annotated[AuthenticatedUser, Depends(require_role("admin_user"))]
+
+
+async def get_audit_pack_service(db: DbSession) -> AuditPackService:
+    """Get the audit pack service with required dependencies.
+
+    Initializes the trust service and object store for audit pack generation.
+    """
+    from pathlib import Path
+
+    from qerds.core.settings import get_settings
+    from qerds.services.storage import ObjectStoreClient
+    from qerds.services.trust import QualificationMode, TrustService, TrustServiceConfig
+
+    settings = get_settings()
+
+    # Initialize trust service
+    trust_config = TrustServiceConfig(
+        mode=QualificationMode(settings.claim_state.value),
+        key_storage_path=Path(settings.trust.key_storage_path),
+    )
+    trust_service = TrustService(trust_config)
+    await trust_service.initialize()
+
+    # Initialize object store
+    object_store = ObjectStoreClient.from_settings(settings.s3)
+
+    return AuditPackService(db, trust_service, object_store)
 
 
 def _get_security_actor(user: AuthenticatedUser, request: Request) -> SecurityActor:  # noqa: ARG001
@@ -137,8 +164,16 @@ async def generate_audit_pack(
 ) -> AuditPackResponse:
     """Generate an audit pack for a specified date range.
 
-    Collects evidence events, audit logs, and config snapshots within
-    the date range and packages them with integrity verification.
+    Creates a comprehensive audit pack containing:
+    - Evidence samples with verification bundles
+    - Audit log integrity proofs
+    - Configuration snapshots
+    - Cryptographic parameters
+    - Key inventory metadata
+    - Policy document references
+    - Release/SBOM metadata
+
+    The pack is sealed and timestamped, then stored to object storage.
 
     Args:
         request_body: Audit pack generation parameters.
@@ -164,101 +199,49 @@ async def generate_audit_pack(
         },
     )
 
-    # Convert dates to datetime range
-    start_dt = datetime.combine(request_body.start_date, datetime.min.time(), tzinfo=UTC)
-    end_dt = datetime.combine(request_body.end_date, datetime.max.time(), tzinfo=UTC)
+    try:
+        # Get audit pack service
+        audit_pack_service = await get_audit_pack_service(db)
 
-    # Collect evidence events in range
-    evidence_count = 0
-    if request_body.include_evidence:
-        evidence_query = select(func.count()).select_from(
-            select(EvidenceEvent)
-            .where(EvidenceEvent.event_time >= start_dt)
-            .where(EvidenceEvent.event_time <= end_dt)
-            .subquery()
+        # Generate the sealed audit pack
+        sealed_pack = await audit_pack_service.generate_audit_pack(
+            start_date=request_body.start_date,
+            end_date=request_body.end_date,
+            created_by=str(user.principal_id),
+            reason=request_body.reason,
+            include_evidence=request_body.include_evidence,
+            include_security_logs=request_body.include_security_logs,
+            include_ops_logs=request_body.include_ops_logs,
+            include_config_snapshots=request_body.include_config_snapshots,
         )
-        evidence_count = (await db.execute(evidence_query)).scalar_one()
 
-    # Verify audit log chains
-    audit_service = AuditLogService(db)
-    evidence_verification = await audit_service.verify_chain(AuditStream.EVIDENCE)
-    security_verification = await audit_service.verify_chain(AuditStream.SECURITY)
-    ops_verification = await audit_service.verify_chain(AuditStream.OPS)
+        await db.commit()
 
-    # Count audit log entries
-    security_log_count = 0
-    ops_log_count = 0
-
-    if request_body.include_security_logs:
-        security_records = await audit_service.get_records(stream=AuditStream.SECURITY, limit=10000)
-        # Filter by date range based on created_at
-        security_log_count = sum(1 for r in security_records if start_dt <= r.created_at <= end_dt)
-
-    if request_body.include_ops_logs:
-        ops_records = await audit_service.get_records(stream=AuditStream.OPS, limit=10000)
-        ops_log_count = sum(1 for r in ops_records if start_dt <= r.created_at <= end_dt)
-
-    # Count config snapshots in range
-    config_snapshot_count = 0
-    if request_body.include_config_snapshots:
-        snapshot_query = select(func.count()).select_from(
-            select(PolicySnapshot)
-            .where(PolicySnapshot.created_at >= start_dt)
-            .where(PolicySnapshot.created_at <= end_dt)
-            .subquery()
+        return AuditPackResponse(
+            pack_id=sealed_pack.pack_id,
+            start_date=sealed_pack.start_date,
+            end_date=sealed_pack.end_date,
+            created_at=sealed_pack.created_at,
+            created_by=sealed_pack.created_by,
+            evidence_count=sealed_pack.contents_summary.get("evidence_count", 0),
+            security_log_count=sealed_pack.contents_summary.get("security_log_count", 0),
+            ops_log_count=sealed_pack.contents_summary.get("ops_log_count", 0),
+            config_snapshot_count=sealed_pack.contents_summary.get("config_snapshot_count", 0),
+            pack_hash=sealed_pack.pack_hash,
+            storage_ref=sealed_pack.storage_ref,
+            verification=AuditPackVerification(
+                evidence_chain_valid=sealed_pack.verification.get("evidence_chain_valid", True),
+                security_chain_valid=sealed_pack.verification.get("security_chain_valid", True),
+                ops_chain_valid=sealed_pack.verification.get("ops_chain_valid", True),
+                errors=sealed_pack.verification.get("errors", []),
+            ),
         )
-        config_snapshot_count = (await db.execute(snapshot_query)).scalar_one()
-
-    # Generate pack metadata for hashing
-    pack_id = uuid.uuid4()
-    created_at = datetime.now(UTC)
-    pack_metadata = {
-        "pack_id": str(pack_id),
-        "start_date": request_body.start_date.isoformat(),
-        "end_date": request_body.end_date.isoformat(),
-        "created_at": created_at.isoformat(),
-        "created_by": str(user.principal_id),
-        "evidence_count": evidence_count,
-        "security_log_count": security_log_count,
-        "ops_log_count": ops_log_count,
-        "config_snapshot_count": config_snapshot_count,
-        "reason": request_body.reason,
-    }
-    pack_hash = hashlib.sha256(json.dumps(pack_metadata, sort_keys=True).encode()).hexdigest()
-
-    # In production, this would upload to object storage
-    storage_ref = f"audit-packs/{pack_id}/{request_body.start_date}_{request_body.end_date}.json"
-
-    await db.commit()
-
-    # Build verification errors list
-    verification_errors: list[str] = []
-    if not evidence_verification.valid:
-        verification_errors.extend(evidence_verification.errors)
-    if not security_verification.valid:
-        verification_errors.extend(security_verification.errors)
-    if not ops_verification.valid:
-        verification_errors.extend(ops_verification.errors)
-
-    return AuditPackResponse(
-        pack_id=pack_id,
-        start_date=request_body.start_date,
-        end_date=request_body.end_date,
-        created_at=created_at,
-        created_by=str(user.principal_id),
-        evidence_count=evidence_count,
-        security_log_count=security_log_count,
-        ops_log_count=ops_log_count,
-        config_snapshot_count=config_snapshot_count,
-        pack_hash=pack_hash,
-        storage_ref=storage_ref,
-        verification=AuditPackVerification(
-            evidence_chain_valid=evidence_verification.valid,
-            security_chain_valid=security_verification.valid,
-            ops_chain_valid=ops_verification.valid,
-            errors=verification_errors,
-        ),
-    )
+    except Exception as e:
+        logger.exception("Failed to generate audit pack: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audit pack: {e!s}",
+        ) from e
 
 
 # -----------------------------------------------------------------------------
