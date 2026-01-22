@@ -13,10 +13,10 @@ Legend: ✅ implemented, ❌ not implemented.
 
 | Requirement ID | Requirement (high level) | Implemented | Comment |
 |---|---|---|---|
-| REQ-A01 | Service operated by a qualified/supervised provider; no false “qualified” claims | ❌ |  |
-| REQ-A02 | Provider can pass required conformity assessments/audits | ❌ |  |
+| REQ-A01 | Service operated by a qualified/supervised provider; no false "qualified" claims | ❌ |  |
+| REQ-A02 | Provider can pass required conformity assessments/audits | ✅ | `src/qerds/services/conformity_package.py`, admin API `POST /admin/conformity-packages`, `GET /admin/traceability-matrix` |
 | REQ-A03 | Documented policies (security, incident, continuity, key/evidence mgmt) aligned with ETSI | ❌ |  |
-| REQ-A04 | Maintain traceability matrix (requirements → code/tests/audit artifacts) | ❌ |  |
+| REQ-A04 | Maintain traceability matrix (requirements → code/tests/audit artifacts) | ✅ | `REQUIREMENT_TRACEABILITY` in conformity_package.py, API `GET /admin/traceability-matrix` |
 | REQ-B01 | Evidence supports proving sending/receiving + date/time | ❌ |  |
 | REQ-B02 | Protect against loss/theft/damage/unauthorised alteration; changes detectable | ❌ |  |
 | REQ-B03 | Identify sender and addressee as required | ❌ |  |

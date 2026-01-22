@@ -3,7 +3,7 @@
 Handles operational and administrative endpoints.
 All endpoints require admin authentication and RBAC.
 
-Covers requirements: REQ-D02, REQ-D08, REQ-H01, REQ-H03, REQ-H04, REQ-H05, REQ-H06, REQ-H10
+Covers requirements: REQ-A02, REQ-D02, REQ-D08, REQ-H01, REQ-H03, REQ-H04, REQ-H05, REQ-H06, REQ-H10
 See specs/implementation/35-apis.md for API design.
 """
 
@@ -14,7 +14,10 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
+
+if TYPE_CHECKING:
+    from qerds.services.conformity_package import ConformityPackageService
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -29,6 +32,8 @@ from qerds.api.schemas.admin import (
     AuditPackVerification,
     ConfigSnapshotRequest,
     ConfigSnapshotResponse,
+    ConformityPackageRequest,
+    ConformityPackageResponse,
     ContentInfoResponse,
     CreateIncidentRequest,
     DeliveryIncidentSummary,
@@ -49,6 +54,8 @@ from qerds.api.schemas.admin import (
     SystemStatsResponse,
     TimelineEventSummary,
     TimelineEventWithVerification,
+    TraceabilityEntryResponse,
+    TraceabilityMatrixResponse,
     UserStats,
 )
 from qerds.db.models.base import QualificationLabel
@@ -1237,4 +1244,216 @@ async def get_system_stats(
             total_evidence_blobs=total_evidence_objects,  # Approximation
             audit_log_record_count=audit_log_count,
         ),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Conformity Assessment Packages (REQ-A02)
+# -----------------------------------------------------------------------------
+
+
+async def get_conformity_package_service(db: DbSession) -> ConformityPackageService:
+    """Get the conformity package service with required dependencies.
+
+    Initializes the trust service and object store for package generation.
+
+    Returns:
+        Configured ConformityPackageService instance.
+    """
+    from pathlib import Path
+
+    from qerds.core.settings import get_settings
+    from qerds.services.conformity_package import ConformityPackageService
+    from qerds.services.storage import ObjectStoreClient
+    from qerds.services.trust import QualificationMode, TrustService, TrustServiceConfig
+
+    settings = get_settings()
+
+    # Initialize trust service
+    trust_config = TrustServiceConfig(
+        mode=QualificationMode(settings.claim_state.value),
+        key_storage_path=Path(settings.trust.key_storage_path),
+    )
+    trust_service = TrustService(trust_config)
+    await trust_service.initialize()
+
+    # Initialize object store
+    object_store = ObjectStoreClient.from_settings(settings.s3)
+
+    # Use project root as base path for policy files
+    base_path = Path(__file__).parent.parent.parent.parent.parent
+
+    return ConformityPackageService(db, trust_service, object_store, base_path=base_path)
+
+
+@router.post(
+    "/conformity-packages",
+    response_model=ConformityPackageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate conformity assessment package",
+    description="Generate a comprehensive package for QERDS/LRE conformity assessment.",
+)
+async def generate_conformity_package(
+    request_body: ConformityPackageRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> ConformityPackageResponse:
+    """Generate a conformity assessment readiness package.
+
+    Creates a comprehensive package for auditors performing QERDS/LRE
+    certification assessments. The package includes:
+
+    - Requirement traceability matrix (REQ-A04)
+    - Policy document references (REQ-A03)
+    - Evidence samples from the system
+    - Configuration snapshots
+    - Key inventory and ceremony evidence (REQ-H07)
+    - Release/SBOM metadata
+
+    The package is sealed and timestamped, then stored to object storage.
+
+    Args:
+        request_body: Package generation parameters.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        ConformityPackageResponse with package details and storage reference.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="generate_conformity_package",
+        target_type="conformity_package",
+        target_id=request_body.assessment_type,
+        details={
+            "assessment_type": request_body.assessment_type,
+            "reason": request_body.reason,
+            "include_evidence": request_body.include_evidence_samples,
+            "include_ceremonies": request_body.include_key_ceremonies,
+        },
+    )
+
+    try:
+        # Get conformity package service
+        conformity_service = await get_conformity_package_service(db)
+
+        # Generate the sealed package
+        sealed_package = await conformity_service.generate_conformity_package(
+            assessment_type=request_body.assessment_type,
+            created_by=str(user.principal_id),
+            reason=request_body.reason,
+            include_evidence_samples=request_body.include_evidence_samples,
+            include_key_ceremonies=request_body.include_key_ceremonies,
+        )
+
+        await db.commit()
+
+        return ConformityPackageResponse(
+            package_id=sealed_package.package_id,
+            assessment_type=sealed_package.assessment_type,
+            created_at=sealed_package.created_at,
+            created_by=sealed_package.created_by,
+            requirement_count=sealed_package.contents_summary.get("requirement_count", 0),
+            policy_document_count=sealed_package.contents_summary.get("policy_document_count", 0),
+            evidence_sample_count=sealed_package.contents_summary.get("evidence_sample_count", 0),
+            config_snapshot_count=sealed_package.contents_summary.get("config_snapshot_count", 0),
+            key_count=sealed_package.contents_summary.get("key_count", 0),
+            ceremony_event_count=sealed_package.contents_summary.get("ceremony_event_count", 0),
+            package_hash=sealed_package.package_hash,
+            storage_ref=sealed_package.storage_ref,
+            qualification_label=sealed_package.qualification_label,
+        )
+    except Exception as e:
+        logger.exception("Failed to generate conformity package: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate conformity package: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/traceability-matrix",
+    response_model=TraceabilityMatrixResponse,
+    summary="Get requirement traceability matrix",
+    description="Export the requirement traceability matrix for REQ-A04 compliance.",
+)
+async def get_traceability_matrix(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> TraceabilityMatrixResponse:
+    """Get the requirement traceability matrix.
+
+    Returns the complete traceability matrix mapping requirement IDs
+    to implementation modules, tests, and evidence artifacts per REQ-A04.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        TraceabilityMatrixResponse with all traceability entries.
+    """
+    from qerds.services.conformity_package import REQUIREMENT_TRACEABILITY
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="view_traceability_matrix",
+        target_type="traceability_matrix",
+        target_id="all",
+    )
+
+    # Build entries from the traceability constant
+    entries = []
+    by_category: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+
+    for req_id, req_data in REQUIREMENT_TRACEABILITY.items():
+        # Determine implementation status
+        has_modules = bool(req_data.get("modules"))
+        has_tests = bool(req_data.get("tests"))
+
+        if has_modules and has_tests:
+            impl_status = "implemented"
+        elif has_modules:
+            impl_status = "partial"
+        else:
+            impl_status = "not_implemented"
+
+        category = req_data.get("category", "other")
+
+        # Update counts
+        by_category[category] = by_category.get(category, 0) + 1
+        by_status[impl_status] = by_status.get(impl_status, 0) + 1
+
+        entries.append(
+            TraceabilityEntryResponse(
+                requirement_id=req_id,
+                title=req_data.get("title", ""),
+                category=category,
+                modules=req_data.get("modules", []),
+                tests=req_data.get("tests", []),
+                evidence=req_data.get("evidence", []),
+                implementation_status=impl_status,
+            )
+        )
+
+    await db.commit()
+
+    return TraceabilityMatrixResponse(
+        generated_at=datetime.now(UTC),
+        generated_by=str(user.principal_id),
+        total_requirements=len(entries),
+        by_category=by_category,
+        by_status=by_status,
+        entries=entries,
     )
