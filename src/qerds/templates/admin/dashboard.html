@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Administration{% endblock %}
+{% block title %}{{ _('admin.title') }}{% endblock %}
 
 {% block main %}
 <div class="container container--wide">
     <header class="page-header">
-        <h1 class="page-title">Tableau de bord administrateur</h1>
-        <p class="page-description">Supervision du service de lettre recommandée électronique</p>
+        <h1 class="page-title">{{ _('admin.dashboard_title') }}</h1>
+        <p class="page-description">{{ _('admin.dashboard_description') }}</p>
     </header>
 
     <div class="admin-grid">
@@ -15,7 +15,7 @@
             <!-- Qualification Status -->
             <section class="card mb-6">
                 <div class="card-header">
-                    <h2 class="card-title">Statut de qualification</h2>
+                    <h2 class="card-title">{{ _('admin.qualification_status') }}</h2>
                 </div>
                 <div class="card-body">
                     {% if qualification_mode == 'qualified' %}
@@ -23,9 +23,9 @@
                         <svg class="qualification-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                         </svg>
-                        <p class="qualification-label">Service Qualifié eIDAS</p>
+                        <p class="qualification-label">{{ _('qualification.qualified') }}</p>
                         <p class="qualification-description">
-                            Ce service est qualifié conformément au règlement eIDAS et enregistré auprès de l'ANSSI.
+                            {{ _('admin.qualified_note') }}
                         </p>
                     </div>
                     {% else %}
@@ -33,9 +33,9 @@
                         <svg class="qualification-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                         </svg>
-                        <p class="qualification-label">Mode développement</p>
+                        <p class="qualification-label">{{ _('qualification.dev') }}</p>
                         <p class="qualification-description">
-                            Ce service n'est pas qualifié. Les preuves générées n'ont pas de valeur juridique.
+                            {{ _('admin.dev_note') }}
                         </p>
                     </div>
                     {% endif %}
@@ -43,21 +43,21 @@
             </section>
 
             <!-- Stats Overview -->
-            <section class="stats-grid" aria-label="Statistiques globales">
+            <section class="stats-grid" aria-label="{{ _('admin.dashboard_title') }}">
                 <article class="stat-card">
-                    <p class="stat-label">Envois aujourd'hui</p>
+                    <p class="stat-label">{{ _('admin.stats_today') }}</p>
                     <p class="stat-value">{{ stats.today or 47 }}</p>
                 </article>
                 <article class="stat-card">
-                    <p class="stat-label">Ce mois</p>
+                    <p class="stat-label">{{ _('admin.stats_this_month') }}</p>
                     <p class="stat-value">{{ stats.month or 1248 }}</p>
                 </article>
                 <article class="stat-card">
-                    <p class="stat-label">En attente</p>
+                    <p class="stat-label">{{ _('admin.stats_pending') }}</p>
                     <p class="stat-value">{{ stats.pending or 156 }}</p>
                 </article>
                 <article class="stat-card">
-                    <p class="stat-label">Taux d'acceptation</p>
+                    <p class="stat-label">{{ _('admin.stats_acceptance_rate') }}</p>
                     <p class="stat-value">{{ stats.acceptance_rate or '87%' }}</p>
                 </article>
             </section>
@@ -65,17 +65,17 @@
             <!-- Recent Activity -->
             <section class="card">
                 <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
-                    <h2 class="card-title">Activité récente</h2>
-                    <a href="/admin/logs" class="btn btn--ghost btn--sm">Voir les logs</a>
+                    <h2 class="card-title">{{ _('admin.recent_activity') }}</h2>
+                    <a href="/admin/logs" class="btn btn--ghost btn--sm">{{ _('admin.view_logs') }}</a>
                 </div>
                 <div class="table-container" style="border: none; border-radius: 0;">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Horodatage</th>
-                                <th>Événement</th>
-                                <th>Référence</th>
-                                <th>Détails</th>
+                                <th>{{ _('admin.timestamp') }}</th>
+                                <th>{{ _('admin.event') }}</th>
+                                <th>{{ _('delivery.reference') }}</th>
+                                <th>{{ _('admin.details') }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -86,15 +86,15 @@
                                 </td>
                                 <td>
                                     {% if event.type == 'deposited' %}
-                                    <span class="status-badge status--deposited">Dépôt</span>
+                                    <span class="status-badge status--deposited">{{ _('admin.event_deposit') }}</span>
                                     {% elif event.type == 'notified' %}
-                                    <span class="status-badge status--notified">Notification</span>
+                                    <span class="status-badge status--notified">{{ _('admin.event_notification') }}</span>
                                     {% elif event.type == 'accepted' %}
-                                    <span class="status-badge status--accepted">Accepté</span>
+                                    <span class="status-badge status--accepted">{{ _('admin.event_accepted') }}</span>
                                     {% elif event.type == 'refused' %}
-                                    <span class="status-badge status--refused">Refusé</span>
+                                    <span class="status-badge status--refused">{{ _('admin.event_refused') }}</span>
                                     {% elif event.type == 'expired' %}
-                                    <span class="status-badge status--expired">Expiré</span>
+                                    <span class="status-badge status--expired">{{ _('admin.event_expired') }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -116,44 +116,44 @@
             <!-- System Health -->
             <section class="card mb-6">
                 <div class="card-header">
-                    <h2 class="card-title">Santé du système</h2>
+                    <h2 class="card-title">{{ _('admin.system_health') }}</h2>
                 </div>
                 <div class="card-body">
                     <div class="system-status">
                         <div class="status-item">
                             <span class="status-item-label">
                                 <span class="status-dot status-dot--healthy"></span>
-                                API
+                                {{ _('admin.api') }}
                             </span>
-                            <span class="status-item-value">Opérationnel</span>
+                            <span class="status-item-value">{{ _('admin.operational') }}</span>
                         </div>
                         <div class="status-item">
                             <span class="status-item-label">
                                 <span class="status-dot status-dot--healthy"></span>
-                                Base de données
+                                {{ _('admin.database') }}
                             </span>
-                            <span class="status-item-value">Opérationnel</span>
+                            <span class="status-item-value">{{ _('admin.operational') }}</span>
                         </div>
                         <div class="status-item">
                             <span class="status-item-label">
                                 <span class="status-dot status-dot--healthy"></span>
-                                Service de signature
+                                {{ _('admin.signing_service') }}
                             </span>
-                            <span class="status-item-value">Opérationnel</span>
+                            <span class="status-item-value">{{ _('admin.operational') }}</span>
                         </div>
                         <div class="status-item">
                             <span class="status-item-label">
                                 <span class="status-dot status-dot--healthy"></span>
-                                Horodatage qualifié
+                                {{ _('admin.qualified_timestamp') }}
                             </span>
-                            <span class="status-item-value">Opérationnel</span>
+                            <span class="status-item-value">{{ _('admin.operational') }}</span>
                         </div>
                         <div class="status-item">
                             <span class="status-item-label">
                                 <span class="status-dot status-dot--healthy"></span>
-                                Stockage S3
+                                {{ _('admin.s3_storage') }}
                             </span>
-                            <span class="status-item-value">87% utilisé</span>
+                            <span class="status-item-value">87% {{ _('admin.percent_used') }}</span>
                         </div>
                     </div>
                 </div>
@@ -162,7 +162,7 @@
             <!-- Audit Actions -->
             <section class="card">
                 <div class="card-header">
-                    <h2 class="card-title">Actions d'audit</h2>
+                    <h2 class="card-title">{{ _('admin.audit_actions') }}</h2>
                 </div>
                 <div class="card-body">
                     <div class="audit-actions">
@@ -173,8 +173,8 @@
                                 </svg>
                             </div>
                             <div class="audit-action-content">
-                                <p class="audit-action-title">Exporter pack d'audit</p>
-                                <p class="audit-action-description">Preuves, config, SBOM pour conformité</p>
+                                <p class="audit-action-title">{{ _('admin.export_audit_pack') }}</p>
+                                <p class="audit-action-description">{{ _('admin.export_audit_pack_desc') }}</p>
                             </div>
                         </a>
 
@@ -185,8 +185,8 @@
                                 </svg>
                             </div>
                             <div class="audit-action-content">
-                                <p class="audit-action-title">Revue des accès</p>
-                                <p class="audit-action-description">RBAC et dernières connexions</p>
+                                <p class="audit-action-title">{{ _('admin.access_review') }}</p>
+                                <p class="audit-action-description">{{ _('admin.access_review_desc') }}</p>
                             </div>
                         </a>
 
@@ -197,8 +197,8 @@
                                 </svg>
                             </div>
                             <div class="audit-action-content">
-                                <p class="audit-action-title">Historique config</p>
-                                <p class="audit-action-description">Modifications et snapshots</p>
+                                <p class="audit-action-title">{{ _('admin.config_history') }}</p>
+                                <p class="audit-action-description">{{ _('admin.config_history_desc') }}</p>
                             </div>
                         </a>
 
@@ -209,8 +209,8 @@
                                 </svg>
                             </div>
                             <div class="audit-action-content">
-                                <p class="audit-action-title">Gestion des clés</p>
-                                <p class="audit-action-description">Lifecycle HSM/QSCD</p>
+                                <p class="audit-action-title">{{ _('admin.key_management') }}</p>
+                                <p class="audit-action-description">{{ _('admin.key_management_desc') }}</p>
                             </div>
                         </a>
 
@@ -221,8 +221,8 @@
                                 </svg>
                             </div>
                             <div class="audit-action-content">
-                                <p class="audit-action-title">Incidents</p>
-                                <p class="audit-action-description">Détection et timelines</p>
+                                <p class="audit-action-title">{{ _('admin.incidents') }}</p>
+                                <p class="audit-action-description">{{ _('admin.incidents_desc') }}</p>
                             </div>
                         </a>
                     </div>

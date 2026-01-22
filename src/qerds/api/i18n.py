@@ -1,122 +1,134 @@
 """Internationalization (i18n) infrastructure for QERDS.
 
-This module provides the foundation for multi-language support per:
+This module provides multi-language support per:
 - SPEC-J01: French language support (primary)
 - SPEC-J02: English language support (secondary)
 
-Currently, French is hardcoded in templates. This module prepares
-the infrastructure for future translation integration using:
+Features:
 - Language detection from Accept-Language header
 - Language preference cookie
 - URL parameter override (?lang=xx)
-
-Future implementation will use gettext or similar for string externalization.
+- JSON-based translations loaded from locales/ directory
+- Nested key access (e.g., "nav.dashboard")
+- Fallback to key name if translation is missing
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from starlette.requests import Request
+
+logger = logging.getLogger(__name__)
 
 # Supported languages per SPEC-J01, SPEC-J02
 SUPPORTED_LANGUAGES = ("fr", "en")
 DEFAULT_LANGUAGE = "fr"
 
-# Common UI strings placeholder - to be populated with actual translations
-# This structure prepares for gettext (.po/.mo) or JSON-based translations
-TRANSLATIONS: dict[str, dict[str, str]] = {
-    "fr": {
-        # Common
-        "app.title": "QERDS",
-        "app.tagline": "Lettre Recommandee Electronique Qualifiee",
-        "nav.dashboard": "Tableau de bord",
-        "nav.new_delivery": "Nouvel envoi",
-        "nav.history": "Historique",
-        "nav.audit": "Audit",
-        "nav.config": "Configuration",
-        # Auth
-        "auth.login": "Se connecter",
-        "auth.logout": "Deconnexion",
-        "auth.login_title": "Connexion a votre espace",
-        "auth.franceconnect": "Se connecter avec FranceConnect+",
-        "auth.franceconnect_note": (
-            "FranceConnect+ garantit une identification de niveau eleve (eIDAS Substantiel)"
-        ),
-        # Forms
-        "form.email": "Adresse e-mail",
-        "form.password": "Mot de passe",
-        "form.required": "Champ obligatoire",
-        "form.submit": "Envoyer",
-        "form.cancel": "Annuler",
-        "form.save_draft": "Enregistrer brouillon",
-        # Delivery status
-        "status.draft": "Brouillon",
-        "status.deposited": "Depose",
-        "status.notified": "Notifie",
-        "status.available": "Disponible",
-        "status.accepted": "Accepte",
-        "status.refused": "Refuse",
-        "status.expired": "Neglige",
-        "status.received": "Recu",
-        # Qualification
-        "qualification.qualified": "Service Qualifie eIDAS",
-        "qualification.dev": "Mode developpement",
-        "qualification.dev_warning": (
-            "Ce service n'est pas qualifie. Les preuves generees n'ont pas de valeur juridique."
-        ),
-        # Errors
-        "error.not_found": "Page non trouvee",
-        "error.unauthorized": "Acces non autorise",
-        "error.server": "Erreur serveur",
-    },
-    "en": {
-        # Common
-        "app.title": "QERDS",
-        "app.tagline": "Qualified Electronic Registered Delivery Service",
-        "nav.dashboard": "Dashboard",
-        "nav.new_delivery": "New delivery",
-        "nav.history": "History",
-        "nav.audit": "Audit",
-        "nav.config": "Configuration",
-        # Auth
-        "auth.login": "Log in",
-        "auth.logout": "Log out",
-        "auth.login_title": "Log in to your account",
-        "auth.franceconnect": "Log in with FranceConnect+",
-        "auth.franceconnect_note": (
-            "FranceConnect+ guarantees high-level identification (eIDAS Substantial)"
-        ),
-        # Forms
-        "form.email": "Email address",
-        "form.password": "Password",
-        "form.required": "Required field",
-        "form.submit": "Submit",
-        "form.cancel": "Cancel",
-        "form.save_draft": "Save draft",
-        # Delivery status
-        "status.draft": "Draft",
-        "status.deposited": "Deposited",
-        "status.notified": "Notified",
-        "status.available": "Available",
-        "status.accepted": "Accepted",
-        "status.refused": "Refused",
-        "status.expired": "Expired",
-        "status.received": "Received",
-        # Qualification
-        "qualification.qualified": "eIDAS Qualified Service",
-        "qualification.dev": "Development mode",
-        "qualification.dev_warning": (
-            "This service is not qualified. Generated evidence has no legal value."
-        ),
-        # Errors
-        "error.not_found": "Page not found",
-        "error.unauthorized": "Unauthorized",
-        "error.server": "Server error",
-    },
-}
+# Path to locale files
+LOCALES_DIR = Path(__file__).parent.parent / "locales"
+
+# Cache for loaded translations
+_translations_cache: dict[str, dict[str, Any]] = {}
+
+
+def _load_translations(lang: str) -> dict[str, Any]:
+    """Load translations from JSON file for a language.
+
+    Args:
+        lang: Two-letter language code.
+
+    Returns:
+        Translation dictionary with nested structure.
+    """
+    if lang in _translations_cache:
+        return _translations_cache[lang]
+
+    locale_file = LOCALES_DIR / f"{lang}.json"
+    if not locale_file.exists():
+        logger.warning("Locale file not found: %s", locale_file)
+        return {}
+
+    try:
+        with locale_file.open("r", encoding="utf-8") as f:
+            translations = json.load(f)
+            _translations_cache[lang] = translations
+            return translations
+    except (json.JSONDecodeError, OSError) as e:
+        logger.error("Failed to load locale file %s: %s", locale_file, e)
+        return {}
+
+
+def _get_nested_value(data: dict[str, Any], key: str) -> str | None:
+    """Get a value from a nested dictionary using dot notation.
+
+    Args:
+        data: The dictionary to search.
+        key: Dot-separated key (e.g., "nav.dashboard").
+
+    Returns:
+        The value if found, None otherwise.
+    """
+    parts = key.split(".")
+    current = data
+    for part in parts:
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    # Only return if we got a string value, not a nested dict
+    return current if isinstance(current, str) else None
+
+
+def _flatten_translations(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
+    """Flatten a nested translation dictionary to dot-notation keys.
+
+    Args:
+        data: Nested translation dictionary.
+        prefix: Current key prefix for recursion.
+
+    Returns:
+        Flat dictionary with dot-notation keys.
+    """
+    result: dict[str, str] = {}
+    for key, value in data.items():
+        # Skip metadata keys
+        if key.startswith("_"):
+            continue
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            result.update(_flatten_translations(value, full_key))
+        elif isinstance(value, str):
+            result[full_key] = value
+    return result
+
+
+def reload_translations() -> None:
+    """Clear the translation cache, forcing a reload on next access.
+
+    Useful for development or after updating locale files.
+    """
+    _translations_cache.clear()
+
+
+def get_all_translation_keys(lang: str = DEFAULT_LANGUAGE) -> set[str]:
+    """Get all available translation keys for a language.
+
+    Args:
+        lang: Two-letter language code.
+
+    Returns:
+        Set of all translation keys in dot notation.
+    """
+    translations = _load_translations(lang)
+    flat = _flatten_translations(translations)
+    return set(flat.keys())
 
 
 @dataclass
@@ -125,25 +137,30 @@ class LanguageContext:
 
     Attributes:
         code: Two-letter language code (fr, en).
-        name: Display name in the language.
-        translations: Translation dictionary for the language.
+        name: Display name in the language (native).
+        name_english: Display name in English.
+        is_rtl: Whether the language is right-to-left.
     """
 
     code: str
     name: str
-    translations: dict[str, str]
+    name_english: str
+    is_rtl: bool = False
 
 
-LANGUAGE_INFO = {
+# Language metadata (not translations, just language info)
+LANGUAGE_INFO: dict[str, LanguageContext] = {
     "fr": LanguageContext(
         code="fr",
         name="Francais",
-        translations=TRANSLATIONS["fr"],
+        name_english="French",
+        is_rtl=False,
     ),
     "en": LanguageContext(
         code="en",
         name="English",
-        translations=TRANSLATIONS["en"],
+        name_english="English",
+        is_rtl=False,
     ),
 }
 
@@ -192,29 +209,68 @@ def get_language_context(lang: str) -> LanguageContext:
         lang: Two-letter language code.
 
     Returns:
-        LanguageContext with translations and metadata.
+        LanguageContext with language metadata.
     """
     return LANGUAGE_INFO.get(lang, LANGUAGE_INFO[DEFAULT_LANGUAGE])
 
 
-def translate(key: str, lang: str = DEFAULT_LANGUAGE) -> str:
+def get_available_languages() -> list[LanguageContext]:
+    """Get list of all available languages.
+
+    Returns:
+        List of LanguageContext objects for each supported language.
+    """
+    return [LANGUAGE_INFO[lang] for lang in SUPPORTED_LANGUAGES]
+
+
+def translate(key: str, lang: str = DEFAULT_LANGUAGE, **kwargs: Any) -> str:
     """Translate a key to the specified language.
 
+    Supports string interpolation with keyword arguments.
+
     Args:
-        key: Translation key (e.g., "auth.login").
+        key: Translation key in dot notation (e.g., "nav.dashboard").
         lang: Target language code.
+        **kwargs: Variables to interpolate into the translation.
 
     Returns:
         Translated string, or the key itself if not found.
+
+    Example:
+        >>> translate("nav.dashboard", "fr")
+        "Tableau de bord"
+        >>> translate("greeting", "en", name="John")
+        "Hello, John!"
     """
-    translations = TRANSLATIONS.get(lang, TRANSLATIONS[DEFAULT_LANGUAGE])
-    return translations.get(key, key)
+    # Load translations for the requested language
+    translations = _load_translations(lang)
+    value = _get_nested_value(translations, key)
+
+    # Fallback to default language if not found
+    if value is None and lang != DEFAULT_LANGUAGE:
+        translations = _load_translations(DEFAULT_LANGUAGE)
+        value = _get_nested_value(translations, key)
+
+    # If still not found, return the key
+    if value is None:
+        logger.debug("Missing translation for key '%s' in language '%s'", key, lang)
+        return key
+
+    # Interpolate variables if any provided
+    if kwargs:
+        try:
+            return value.format(**kwargs)
+        except KeyError as e:
+            logger.warning("Missing interpolation variable %s for key '%s'", e, key)
+            return value
+
+    return value
 
 
-def create_translator(lang: str) -> callable:
+def create_translator(lang: str) -> Callable[[str], str]:
     """Create a translation function bound to a specific language.
 
-    This is useful for passing to templates as a callable.
+    This is useful for passing to templates as a callable (the _ function).
 
     Args:
         lang: Target language code.
@@ -224,11 +280,48 @@ def create_translator(lang: str) -> callable:
 
     Example:
         >>> _ = create_translator("fr")
-        >>> _("auth.login")
-        "Se connecter"
+        >>> _("nav.dashboard")
+        "Tableau de bord"
     """
 
-    def _translate(key: str) -> str:
-        return translate(key, lang)
+    def _translate(key: str, **kwargs: Any) -> str:
+        return translate(key, lang, **kwargs)
 
     return _translate
+
+
+def get_status_label(status: str, lang: str = DEFAULT_LANGUAGE) -> str:
+    """Get the translated label for a delivery status.
+
+    Args:
+        status: Status code (draft, deposited, notified, etc.).
+        lang: Target language code.
+
+    Returns:
+        Translated status label.
+    """
+    return translate(f"status.{status}", lang)
+
+
+def get_error_message(error_code: str, lang: str = DEFAULT_LANGUAGE) -> str:
+    """Get the translated error message for an error code.
+
+    Args:
+        error_code: Error code (not_found, unauthorized, etc.).
+        lang: Target language code.
+
+    Returns:
+        Translated error message.
+    """
+    return translate(f"errors.{error_code}", lang)
+
+
+# Pre-load translations at module load time for faster first access
+def _preload_translations() -> None:
+    """Pre-load translations for all supported languages."""
+    for lang in SUPPORTED_LANGUAGES:
+        _load_translations(lang)
+
+
+# Preload on import
+_preload_translations()

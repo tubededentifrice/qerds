@@ -2,17 +2,17 @@
 {# Required: status (draft|deposited|notified|available|accepted|refused|expired|received) #}
 
 {% set status_config = {
-    'draft': {'label': 'Brouillon', 'class': 'status--draft', 'icon': 'edit'},
-    'deposited': {'label': 'Déposé', 'class': 'status--deposited', 'icon': 'inbox'},
-    'notified': {'label': 'Notifié', 'class': 'status--notified', 'icon': 'bell'},
-    'available': {'label': 'Disponible', 'class': 'status--available', 'icon': 'clock'},
-    'accepted': {'label': 'Accepté', 'class': 'status--accepted', 'icon': 'check'},
-    'refused': {'label': 'Refusé', 'class': 'status--refused', 'icon': 'x'},
-    'expired': {'label': 'Négligé', 'class': 'status--expired', 'icon': 'alert'},
-    'received': {'label': 'Reçu', 'class': 'status--received', 'icon': 'check-circle'}
+    'draft': {'class': 'status--draft', 'icon': 'edit'},
+    'deposited': {'class': 'status--deposited', 'icon': 'inbox'},
+    'notified': {'class': 'status--notified', 'icon': 'bell'},
+    'available': {'class': 'status--available', 'icon': 'clock'},
+    'accepted': {'class': 'status--accepted', 'icon': 'check'},
+    'refused': {'class': 'status--refused', 'icon': 'x'},
+    'expired': {'class': 'status--expired', 'icon': 'alert'},
+    'received': {'class': 'status--received', 'icon': 'check-circle'}
 } %}
 
-{% set config = status_config.get(status, {'label': status, 'class': '', 'icon': 'help'}) %}
+{% set config = status_config.get(status, {'class': '', 'icon': 'help'}) %}
 
 <span class="status-badge {{ config.class }}">
     {% if config.icon == 'edit' %}
@@ -32,5 +32,5 @@
     {% elif config.icon == 'check-circle' %}
     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
     {% endif %}
-    {{ config.label }}
+    {{ _('status.' + status) }}
 </span>
