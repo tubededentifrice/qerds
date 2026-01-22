@@ -1,7 +1,7 @@
 # QERDS Development Makefile
 # All commands should be run via Docker for reproducibility
 
-.PHONY: help install lint format typecheck test test-cov clean
+.PHONY: help install lint format typecheck test test-cov clean check-traceability
 
 # Default target
 help:
@@ -25,6 +25,9 @@ help:
 	@echo "Quality gates (run all checks):"
 	@echo "  make check       Run all local checks"
 	@echo "  make docker-check Run all checks in Docker"
+	@echo ""
+	@echo "Compliance:"
+	@echo "  make check-traceability  Validate requirements traceability coverage"
 
 # Local development targets
 install:
@@ -71,6 +74,10 @@ docker-test-cov:
 	docker compose exec qerds-api pytest --cov --cov-report=term-missing
 
 docker-check: docker-lint docker-format-check docker-typecheck docker-test
+
+# Compliance targets (REQ-A04)
+check-traceability:
+	@python3 scripts/check-traceability.py
 
 # Cleanup
 clean:
