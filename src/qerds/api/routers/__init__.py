@@ -3,6 +3,7 @@
 Each router handles a specific API namespace per specs/implementation/35-apis.md:
 - pages: HTML page routes (login, dashboards, pickup, verify)
 - auth: Authentication routes (OIDC/FranceConnect+)
+- pickup: Recipient pickup portal with auth wall (REQ-E02, REQ-F03)
 - sender: Sender operations (authenticated)
 - recipient: Recipient portal operations
 - verify: Third-party verification (public but token-gated)
@@ -12,6 +13,7 @@ Each router handles a specific API namespace per specs/implementation/35-apis.md
 from qerds.api.routers.admin import router as admin_router
 from qerds.api.routers.auth import router as auth_router
 from qerds.api.routers.pages import router as pages_router
+from qerds.api.routers.pickup import router as pickup_router
 from qerds.api.routers.recipient import router as recipient_router
 from qerds.api.routers.sender import router as sender_router
 from qerds.api.routers.verify import router as verify_router
@@ -20,6 +22,7 @@ __all__ = [
     "admin_router",
     "auth_router",
     "pages_router",
+    "pickup_router",
     "recipient_router",
     "sender_router",
     "verify_router",
