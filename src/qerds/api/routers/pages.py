@@ -223,6 +223,28 @@ async def login_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "login.html", context)
 
 
+@router.get("/logout", response_class=HTMLResponse)
+async def logout_page(_request: Request) -> RedirectResponse:
+    """Handle logout and redirect to login page.
+
+    Clears the session cookie and redirects to the login page.
+    For proper session revocation, the client should call POST /auth/logout first,
+    but this GET endpoint provides a user-friendly redirect flow.
+
+    Args:
+        _request: FastAPI request object (unused but required for route handler).
+
+    Returns:
+        Redirect response to login page with cleared session cookie.
+    """
+    from qerds.api.middleware.auth import SESSION_COOKIE_NAME
+
+    response = RedirectResponse(url="/login", status_code=302)
+    # Clear the session cookie
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    return response
+
+
 @router.get("/sender/dashboard", response_class=HTMLResponse)
 async def sender_dashboard(request: Request) -> HTMLResponse:
     """Render the sender dashboard.
