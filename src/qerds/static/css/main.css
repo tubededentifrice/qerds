@@ -363,6 +363,76 @@ a:hover {
     gap: var(--space-3);
 }
 
+/* Language Switcher */
+.language-switcher {
+    position: relative;
+}
+
+.language-switcher-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.language-switcher-trigger:hover {
+    background: var(--bg-surface-alt);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.language-icon {
+    width: 1rem;
+    height: 1rem;
+}
+
+.language-current {
+    font-weight: var(--font-medium);
+}
+
+.language-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: var(--space-2);
+    min-width: 8rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    list-style: none;
+    padding: var(--space-1);
+    z-index: 200;
+}
+
+.language-option {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+.language-option:hover {
+    background: var(--bg-surface-alt);
+    color: var(--text-primary);
+}
+
+.language-option.active {
+    background: rgba(0, 0, 145, 0.08);
+    color: var(--color-primary);
+    font-weight: var(--font-medium);
+}
+
 .user-menu {
     position: relative;
 }
@@ -1250,6 +1320,36 @@ a:hover {
     color: var(--text-tertiary);
     text-align: center;
     margin-top: var(--space-4);
+}
+
+/* Login page header for language switcher */
+.login-header {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: var(--space-4);
+    z-index: 10;
+}
+
+.login-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+/* Login page secondary text */
+.login-register-prompt {
+    text-align: center;
+    margin-top: var(--space-6);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.login-legal-links {
+    text-align: center;
+    margin-top: var(--space-6);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
 }
 
 /* --------------------------------------------------------------------------
