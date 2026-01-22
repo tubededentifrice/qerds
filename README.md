@@ -53,7 +53,7 @@ Legend: ✅ implemented, ❌ not implemented.
 
 | Requirement ID | Requirement (high level) | Implemented | Comment |
 |---|---|---|---|
-| REQ-H01 | Audit pack export (evidence samples, config snapshots, crypto params, SBOM, etc.) | ❌ |  |
+| REQ-H01 | Audit pack export (evidence samples, config snapshots, crypto params, SBOM, etc.) | ✅ | `src/qerds/services/audit_pack.py`, admin API `POST /admin/audit-packs` |
 | REQ-H02 | Retention/retrieval controls for QERDS + CPCE LRE evidence/proofs | ❌ |  |
 | REQ-H03 | Tamper-evident operational/security logs with retention | ❌ |  |
 | REQ-H04 | Incident detection/triage and exportable timelines | ❌ |  |
