@@ -103,7 +103,17 @@
     "received_description": "Un courrier recommande avec accuse de reception vous attend. Identifiez-vous pour consulter les details.",
     "delivery_info": "Informations de l'envoi",
     "eidas_compliance_note": "Ce service est conforme au reglement europeen eIDAS et au Code des Postes et Communications Electroniques francais.",
-    "learn_more": "En savoir plus"
+    "learn_more": "En savoir plus",
+    "days": "jours",
+    "hours": "heures",
+    "minutes": "min",
+    "deadline_expired": "Delai expire",
+    "calculating": "Calcul en cours",
+    "total_attachments": "{count} piece(s) jointe(s)",
+    "confirm_accept": "Etes-vous sur de vouloir accepter cette lettre recommandee ? Cette action est irreversible.",
+    "confirm_refuse": "Etes-vous sur de vouloir refuser cette lettre recommandee ? Vous n'aurez pas acces au contenu.",
+    "processing": "Traitement en cours...",
+    "consent_checkbox": "Je consens a recevoir des lettres recommandees electroniques conformement a l'article L.100 du Code des Postes et Communications Electroniques."
   },
   "accepted": {
     "title": "Lettre recommandee acceptee",

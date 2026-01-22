@@ -103,7 +103,17 @@
     "received_description": "A registered mail with acknowledgment of receipt is waiting for you. Identify yourself to view the details.",
     "delivery_info": "Delivery information",
     "eidas_compliance_note": "This service complies with the European eIDAS regulation and the French Postal and Electronic Communications Code.",
-    "learn_more": "Learn more"
+    "learn_more": "Learn more",
+    "days": "days",
+    "hours": "hours",
+    "minutes": "min",
+    "deadline_expired": "Deadline expired",
+    "calculating": "Calculating",
+    "total_attachments": "{count} attachment(s)",
+    "confirm_accept": "Are you sure you want to accept this registered mail? This action cannot be undone.",
+    "confirm_refuse": "Are you sure you want to refuse this registered mail? You will not have access to the content.",
+    "processing": "Processing...",
+    "consent_checkbox": "I consent to receive electronic registered mail in accordance with Article L.100 of the French Postal and Electronic Communications Code."
   },
   "accepted": {
     "title": "Registered mail accepted",
