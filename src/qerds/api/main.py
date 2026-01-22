@@ -1,35 +1,49 @@
-"""QERDS API service entry point."""
+"""QERDS API service entry point.
+
+This module provides the application instance for ASGI servers (uvicorn)
+and a run() function for direct execution.
+
+The app is created using the factory pattern from qerds.api.create_app().
+"""
 
 import logging
 
-from fastapi import FastAPI
+from qerds.api import create_app
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="QERDS API",
-    description="Qualified Electronic Registered Delivery Service API",
-    version="0.1.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
-)
-
-
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint for container orchestration."""
-    return {"status": "healthy"}
+# Create the application instance for ASGI servers
+# This is what uvicorn references: qerds.api.main:app
+app = create_app()
 
 
 def run() -> None:
-    """Run the API server using uvicorn."""
+    """Run the API server using uvicorn.
+
+    This function is called by the qerds-api console script
+    defined in pyproject.toml.
+    """
     import uvicorn
+
+    from qerds.core.config import Settings
+
+    # Load settings from environment
+    try:
+        settings = Settings()
+        host = settings.api_host
+        port = settings.api_port
+    except Exception:
+        # Fall back to defaults if settings can't be loaded
+        logger.warning("Could not load settings, using defaults")
+        host = "127.0.0.1"
+        port = 8000
+
+    logger.info("Starting QERDS API on %s:%d", host, port)
 
     uvicorn.run(
         "qerds.api.main:app",
-        host="0.0.0.0",  # noqa: S104 - Binding to all interfaces is intentional for containers
-        port=8000,
+        host=host,
+        port=port,
         reload=False,
     )
 
