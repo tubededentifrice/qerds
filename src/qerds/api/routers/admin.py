@@ -29,24 +29,32 @@ from qerds.api.schemas.admin import (
     AuditPackVerification,
     ConfigSnapshotRequest,
     ConfigSnapshotResponse,
+    ContentInfoResponse,
     CreateIncidentRequest,
     DeliveryIncidentSummary,
     DeliveryStats,
     DeliveryTimelineResponse,
+    DisclosureExportRequest,
+    DisclosureExportResponse,
+    DisputeTimelineResponse,
     EvidenceStats,
+    EvidenceVerificationResult,
     IncidentExportResponse,
     IncidentResponse,
     IncidentTimelineEvent,
+    PartyInfoResponse,
     RoleBindingExport,
     StorageStats,
     SystemStatsResponse,
     TimelineEventSummary,
+    TimelineEventWithVerification,
     UserStats,
 )
 from qerds.db.models.base import QualificationLabel
 from qerds.db.models.deliveries import ContentObject, Delivery
 from qerds.db.models.evidence import EvidenceEvent, EvidenceObject, PolicySnapshot
 from qerds.services.audit_pack import AuditPackService
+from qerds.services.dispute import DisputeService
 from qerds.services.security_events import SecurityActor, SecurityEventLogger
 
 logger = logging.getLogger(__name__)
@@ -353,28 +361,169 @@ async def get_delivery_timeline(
 def _get_event_description(event: EvidenceEvent) -> str:
     """Generate human-readable description for an evidence event.
 
+    Uses the canonical EVENT_DESCRIPTIONS from DisputeService to avoid duplication.
+
     Args:
         event: The evidence event.
 
     Returns:
         Human-readable description string.
     """
-    descriptions = {
-        "evt_deposited": "Content deposited by sender",
-        "evt_notification_sent": "Notification sent to recipient",
-        "evt_notification_delivered": "Notification delivered to recipient",
-        "evt_notification_failed": "Notification delivery failed",
-        "evt_content_available": "Content made available for pickup",
-        "evt_content_accessed": "Content accessed by recipient",
-        "evt_content_downloaded": "Content downloaded by recipient",
-        "evt_accepted": "Delivery accepted by recipient",
-        "evt_refused": "Delivery refused by recipient",
-        "evt_received": "Delivery marked as received",
-        "evt_expired": "Delivery expired (acceptance deadline passed)",
-        "evt_retention_extended": "Retention period extended",
-        "evt_retention_deleted": "Data deleted per retention policy",
-    }
-    return descriptions.get(event.event_type.value, f"Event: {event.event_type.value}")
+    return DisputeService.EVENT_DESCRIPTIONS.get(
+        event.event_type.value, f"Event: {event.event_type.value}"
+    )
+
+
+@router.post(
+    "/deliveries/{delivery_id}/export",
+    response_model=DisclosureExportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create disclosure export",
+    description="Create a GDPR-compliant disclosure package for external parties.",
+)
+async def create_disclosure_export(
+    delivery_id: uuid.UUID,
+    request_body: DisclosureExportRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DisclosureExportResponse:
+    """Create a controlled disclosure export package.
+
+    Generates a self-contained package suitable for disclosure to courts,
+    regulators, or other authorized third parties. Includes GDPR-compliant
+    redaction and integrity hashing per REQ-H10.
+
+    Args:
+        delivery_id: UUID of the delivery to export.
+        request_body: Export parameters including reason and redaction level.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        DisclosureExportResponse with redacted timeline and integrity hashes.
+
+    Raises:
+        HTTPException: If delivery not found.
+    """
+    from qerds.services.dispute import (
+        DeliveryNotFoundError,
+        DisputeService,
+        RedactionLevel,
+    )
+
+    # Log the admin action (sensitive export operation)
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_sensitive_access(
+        actor=actor,
+        resource_type="delivery",
+        resource_id=str(delivery_id),
+        access_type="disclosure_export",
+        purpose=request_body.export_reason[:200],
+        details={
+            "redaction_level": request_body.redaction_level,
+        },
+    )
+
+    # Map redaction level from request
+    try:
+        redaction_level = RedactionLevel(request_body.redaction_level)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid redaction level: {request_body.redaction_level}",
+        ) from e
+
+    # Create disclosure package using the dispute service
+    service = DisputeService(db)
+    try:
+        package = await service.create_disclosure_package(
+            delivery_id=delivery_id,
+            exported_by=str(user.principal_id),
+            export_reason=request_body.export_reason,
+            redaction_level=redaction_level,
+        )
+    except DeliveryNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Delivery {delivery_id} not found",
+        ) from e
+
+    await db.commit()
+
+    # Convert service response to API response
+    timeline = package.timeline
+    return DisclosureExportResponse(
+        package_id=package.package_id,
+        delivery_id=package.delivery_id,
+        timeline=DisputeTimelineResponse(
+            delivery_id=timeline.delivery_id,
+            delivery_state=timeline.delivery_state,
+            jurisdiction_profile=timeline.jurisdiction_profile,
+            sender=PartyInfoResponse(
+                party_id=timeline.sender.party_id,
+                party_type=timeline.sender.party_type,
+                display_name=timeline.sender.display_name,
+                email_hash=timeline.sender.email_hash,
+                identity_ref=timeline.sender.identity_ref,
+            ),
+            recipient=PartyInfoResponse(
+                party_id=timeline.recipient.party_id,
+                party_type=timeline.recipient.party_type,
+                display_name=timeline.recipient.display_name,
+                email_hash=timeline.recipient.email_hash,
+                identity_ref=timeline.recipient.identity_ref,
+            ),
+            content_objects=[
+                ContentInfoResponse(
+                    content_object_id=co.content_object_id,
+                    sha256=co.sha256,
+                    size_bytes=co.size_bytes,
+                    mime_type=co.mime_type,
+                    original_filename=co.original_filename,
+                )
+                for co in timeline.content_objects
+            ],
+            events=[
+                TimelineEventWithVerification(
+                    event_id=e.event_id,
+                    event_type=e.event_type,
+                    event_time=e.event_time,
+                    actor_type=e.actor_type,
+                    actor_ref=e.actor_ref,
+                    description=e.description,
+                    evidence_verifications=[
+                        EvidenceVerificationResult(
+                            evidence_object_id=ev.evidence_object_id,
+                            status=ev.status.value,
+                            content_hash_matches=ev.content_hash_matches,
+                            has_provider_attestation=ev.has_provider_attestation,
+                            has_time_attestation=ev.has_time_attestation,
+                            qualification_label=ev.qualification_label,
+                            verification_time=ev.verification_time,
+                            errors=ev.errors,
+                        )
+                        for ev in e.evidence_verifications
+                    ],
+                    event_metadata=e.event_metadata,
+                    policy_snapshot_id=e.policy_snapshot_id,
+                )
+                for e in timeline.events
+            ],
+            policy_snapshots=timeline.policy_snapshots,
+            generated_at=timeline.generated_at,
+            generated_by=timeline.generated_by,
+            redaction_level=timeline.redaction_level.value,
+            verification_summary=timeline.verification_summary,
+        ),
+        export_reason=package.export_reason,
+        exported_at=package.exported_at,
+        exported_by=package.exported_by,
+        package_hash=package.package_hash,
+        integrity_manifest=package.integrity_manifest,
+    )
 
 
 # -----------------------------------------------------------------------------
