@@ -206,6 +206,10 @@ class EventType(enum.Enum):
     EVT_EXPIRED = "evt_expired"
     EVT_RETENTION_EXTENDED = "evt_retention_extended"
     EVT_RETENTION_DELETED = "evt_retention_deleted"
+    # AS4 interoperability events (REQ-C04)
+    EVT_AS4_SENT = "evt_as4_sent"
+    EVT_AS4_RECEIPT_RECEIVED = "evt_as4_receipt_received"
+    EVT_AS4_ERROR = "evt_as4_error"
 
 
 class ActorType(enum.Enum):
