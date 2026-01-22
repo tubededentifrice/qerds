@@ -1,0 +1,30 @@
+# QERDS Python dependencies
+# Generated from pyproject.toml - do not edit manually
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.128.0
+uvicorn[standard]==0.40.0
+python-multipart==0.0.21
+jinja2==3.1.6
+
+# Database
+psycopg[binary,pool]==3.3.2
+sqlalchemy==2.0.46
+alembic==1.18.1
+
+# Configuration
+pydantic==2.12.5
+pydantic-settings==2.12.0
+
+# Cryptography (well-audited library for signatures, hashing, X.509)
+cryptography==46.0.3
+
+# PDF generation for evidence bundles
+weasyprint==68.0
+
+# OIDC/OAuth2 for FranceConnect+ integration
+authlib==1.6.6
+
+# S3-compatible storage (MinIO in dev)
+boto3==1.42.32

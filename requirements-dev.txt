@@ -1,0 +1,19 @@
+# QERDS development dependencies
+# Generated from pyproject.toml - do not edit manually
+# Install with: pip install -r requirements.txt -r requirements-dev.txt
+
+-r requirements.txt
+
+# Testing
+pytest==9.0.2
+pytest-asyncio==1.3.0
+pytest-cov==7.0.0
+httpx==0.28.1
+
+# Code quality
+ruff==0.14.13
+mypy==1.19.1
+
+# Type stubs
+boto3-stubs[s3]==1.42.32
+types-jinja2==2.11.9
