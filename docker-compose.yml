@@ -1,8 +1,87 @@
 # QERDS Development Environment
 # Run with: docker compose up
+#
+# Services:
+#   - postgres: PostgreSQL 16 database
+#   - minio: S3-compatible object storage
+#   - mailpit: Email testing (SMTP + Web UI)
+#   - mocks: UI mockups server
+#
+# Placeholder services (commented until Python project exists):
+#   - qerds-api: FastAPI application
+#   - qerds-worker: Background job runner
+#   - qerds-trust: Signing/timestamping service
 
 services:
-  # UI Mocks Server
+  # --------------------------------------------------------------------------
+  # Core Infrastructure Services
+  # --------------------------------------------------------------------------
+
+  # PostgreSQL 16 - Primary database for state, evidence indexing, audit metadata
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: qerds
+      POSTGRES_USER: qerds
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qerds_dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Bind to localhost only per CLAUDE.md (not public IP 217.182.203.57)
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qerds -d qerds"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # MinIO - S3-compatible object storage for content blobs and evidence bundles
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-qerds_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-qerds_minio_secret}
+    volumes:
+      - minio_data:/data
+    # Bind to localhost only per CLAUDE.md
+    ports:
+      - "127.0.0.1:9000:9000"   # API
+      - "127.0.0.1:9001:9001"   # Console
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Mailpit - Email testing (captures all outbound mail)
+  mailpit:
+    image: axllent/mailpit:latest
+    environment:
+      # Accept any SMTP auth for dev convenience
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    # Bind to localhost only per CLAUDE.md
+    ports:
+      - "127.0.0.1:8025:8025"   # Web UI
+      - "127.0.0.1:1025:1025"   # SMTP
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Development Tools
+  # --------------------------------------------------------------------------
+
+  # UI Mocks Server - Serves UI mockups for design review
   mocks:
     build:
       context: .
@@ -24,10 +103,12 @@ services:
       retries: 3
       start_period: 10s
 
-  # Internal OCI registry (for air-gapped tooling like Trivy DB mirroring).
-  #
-  # Enabled only when explicitly requested:
-  #   docker compose --profile security-tools up
+  # --------------------------------------------------------------------------
+  # Security Tools (optional profile)
+  # Enable with: docker compose --profile security-tools up
+  # --------------------------------------------------------------------------
+
+  # Internal OCI registry (for air-gapped tooling like Trivy DB mirroring)
   registry-auth-init:
     image: httpd:2.4-alpine
     profiles: ["security-tools"]
@@ -68,57 +149,98 @@ services:
     # No host port published by default. Access from inside the compose network:
     #   http://registry:5000
 
-  # Future services (placeholders for full QERDS implementation)
-  # Uncomment when implementing backend
+  # --------------------------------------------------------------------------
+  # QERDS Application Services (PLACEHOLDERS)
+  # Uncomment and configure once Python project structure exists
+  # --------------------------------------------------------------------------
 
-  # postgres:
-  #   image: postgres:16-alpine
+  # qerds-api:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.api
   #   environment:
-  #     POSTGRES_DB: qerds
-  #     POSTGRES_USER: qerds
-  #     POSTGRES_PASSWORD: qerds_dev_password
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
+  #     # Database
+  #     DATABASE_URL: postgresql://qerds:${POSTGRES_PASSWORD:-qerds_dev_password}@postgres:5432/qerds
+  #     # MinIO/S3
+  #     S3_ENDPOINT: http://minio:9000
+  #     S3_ACCESS_KEY: ${MINIO_ROOT_USER:-qerds_minio}
+  #     S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-qerds_minio_secret}
+  #     S3_BUCKET: qerds-evidence
+  #     # SMTP (Mailpit in dev)
+  #     SMTP_HOST: mailpit
+  #     SMTP_PORT: 1025
+  #     # Trust service
+  #     TRUST_SERVICE_URL: http://qerds-trust:8080
   #   ports:
-  #     - "5432:5432"
+  #     - "127.0.0.1:8000:8000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
   #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U qerds"]
-  #     interval: 5s
+  #     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+  #     interval: 10s
   #     timeout: 5s
-  #     retries: 5
+  #     retries: 3
+  #     start_period: 30s
+  #   restart: unless-stopped
 
-  # minio:
-  #   image: minio/minio:latest
-  #   command: server /data --console-address ":9001"
+  # qerds-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.api
+  #   command: ["python", "-m", "qerds.worker"]
   #   environment:
-  #     MINIO_ROOT_USER: qerds_minio
-  #     MINIO_ROOT_PASSWORD: qerds_minio_secret
+  #     # Database
+  #     DATABASE_URL: postgresql://qerds:${POSTGRES_PASSWORD:-qerds_dev_password}@postgres:5432/qerds
+  #     # MinIO/S3
+  #     S3_ENDPOINT: http://minio:9000
+  #     S3_ACCESS_KEY: ${MINIO_ROOT_USER:-qerds_minio}
+  #     S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-qerds_minio_secret}
+  #     S3_BUCKET: qerds-evidence
+  #     # SMTP (Mailpit in dev)
+  #     SMTP_HOST: mailpit
+  #     SMTP_PORT: 1025
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #     # qerds-api:
+  #     #   condition: service_healthy
+  #   restart: unless-stopped
+
+  # qerds-trust:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.trust
+  #   environment:
+  #     # Trust service mode: non_qualified (dev) or qualified (prod with HSM)
+  #     TRUST_MODE: non_qualified
+  #     # Key storage path (for non_qualified mode only)
+  #     KEY_STORAGE_PATH: /keys
   #   volumes:
-  #     - minio_data:/data
+  #     - trust_keys:/keys
   #   ports:
-  #     - "9000:9000"
-  #     - "9001:9001"
+  #     - "127.0.0.1:8080:8080"
   #   healthcheck:
-  #     test: ["CMD", "mc", "ready", "local"]
-  #     interval: 5s
+  #     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+  #     interval: 10s
   #     timeout: 5s
-  #     retries: 5
-
-  # mailpit:
-  #   image: axllent/mailpit:latest
-  #   ports:
-  #     - "8025:8025"  # Web UI
-  #     - "1025:1025"  # SMTP
-  #   environment:
-  #     MP_SMTP_AUTH_ACCEPT_ANY: 1
-  #     MP_SMTP_AUTH_ALLOW_INSECURE: 1
+  #     retries: 3
+  #     start_period: 10s
+  #   restart: unless-stopped
 
 volumes:
+  # Core infrastructure
+  postgres_data:
+  minio_data:
+  # Security tools (optional profile)
   registry_data:
   registry_auth:
-  # Future volumes (uncomment when enabling services above)
-  # postgres_data:
-  # minio_data:
+  # QERDS application (uncomment when enabling services)
+  # trust_keys:
 
 networks:
   default:
