@@ -39,9 +39,9 @@ class TestArtifactType:
         assert ArtifactType.AUDIT_LOG.value == "audit_log"
 
     def test_artifact_type_is_string_enum(self) -> None:
-        """ArtifactType should be usable as string."""
-        assert ArtifactType.DELIVERY == "delivery"
-        assert str(ArtifactType.DELIVERY) == "delivery"
+        """ArtifactType should be usable as string via .value."""
+        assert ArtifactType.DELIVERY.value == "delivery"
+        assert ArtifactType.DELIVERY == ArtifactType.DELIVERY
 
 
 class TestRetentionPolicyService:
@@ -75,7 +75,7 @@ class TestRetentionPolicyService:
         )
 
         assert policy.artifact_type == "content_object"
-        assert policy.retention_days == 90
+        assert policy.minimum_retention_days == 90
         assert policy.expiry_action == RetentionActionType.DELETE
         assert policy.is_active is True
         mock_session.add.assert_called_once()
@@ -125,7 +125,7 @@ class TestRetentionPolicyService:
             expiry_action=RetentionActionType.DELETE,
         )
 
-        assert policy.retention_days == 30
+        assert policy.minimum_retention_days == 30
 
     @pytest.mark.asyncio
     async def test_create_policy_audit_log_short_retention_allowed(
@@ -139,7 +139,7 @@ class TestRetentionPolicyService:
             expiry_action=RetentionActionType.ARCHIVE,
         )
 
-        assert policy.retention_days == 180
+        assert policy.minimum_retention_days == 180
 
     @pytest.mark.asyncio
     async def test_get_policy_found(
@@ -148,13 +148,15 @@ class TestRetentionPolicyService:
         mock_session: AsyncMock,
     ) -> None:
         """Getting an existing policy should return it."""
+        import uuid
+
         mock_policy = MagicMock()
-        mock_policy.id = 1
+        mock_policy.policy_id = uuid.uuid4()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_policy
         mock_session.execute.return_value = mock_result
 
-        result = await service.get_policy(1)
+        result = await service.get_policy(str(mock_policy.policy_id))
 
         assert result == mock_policy
 
@@ -165,11 +167,13 @@ class TestRetentionPolicyService:
         mock_session: AsyncMock,
     ) -> None:
         """Getting a non-existent policy should return None."""
+        import uuid
+
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await service.get_policy(999)
+        result = await service.get_policy(str(uuid.uuid4()))
 
         assert result is None
 
@@ -216,13 +220,16 @@ class TestRetentionPolicyService:
         mock_session: AsyncMock,
     ) -> None:
         """Deactivating an existing policy should succeed."""
+        import uuid
+
         mock_policy = MagicMock()
         mock_policy.is_active = True
+        mock_policy.policy_id = uuid.uuid4()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_policy
         mock_session.execute.return_value = mock_result
 
-        result = await service.deactivate_policy(1)
+        result = await service.deactivate_policy(str(mock_policy.policy_id))
 
         assert result is True
         assert mock_policy.is_active is False
@@ -235,11 +242,13 @@ class TestRetentionPolicyService:
         mock_session: AsyncMock,
     ) -> None:
         """Deactivating a non-existent policy should return False."""
+        import uuid
+
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_session.execute.return_value = mock_result
 
-        result = await service.deactivate_policy(999)
+        result = await service.deactivate_policy(str(uuid.uuid4()))
 
         assert result is False
 
@@ -248,10 +257,11 @@ class TestRetentionPolicyService:
         service: RetentionPolicyService,
     ) -> None:
         """Retention deadline should be created_at + retention_days."""
-        created_at = datetime(2024, 1, 1, tzinfo=UTC)
+        # Use a non-leap year for predictable 365-day calculation
+        created_at = datetime(2025, 1, 1, tzinfo=UTC)
         deadline = service.calculate_retention_deadline(created_at, 365)
 
-        expected = datetime(2025, 1, 1, tzinfo=UTC)
+        expected = datetime(2026, 1, 1, tzinfo=UTC)
         assert deadline == expected
 
     def test_is_past_minimum_retention_true(
@@ -343,7 +353,7 @@ class TestRetentionEnforcementService:
     ) -> None:
         """Finding eligible artifacts should return empty list for now."""
         mock_policy = MagicMock()
-        mock_policy.retention_days = 365
+        mock_policy.minimum_retention_days = 365
         mock_policy.artifact_type = "delivery"
 
         result = await service.find_eligible_artifacts(mock_policy, limit=100)
@@ -357,6 +367,8 @@ class TestRetentionEnforcementService:
         service: RetentionEnforcementService,
     ) -> None:
         """Dry run should succeed without making changes."""
+        import uuid
+
         artifact = EligibleArtifact(
             artifact_type="delivery",
             artifact_ref="del-123",
@@ -365,7 +377,7 @@ class TestRetentionEnforcementService:
         )
         mock_policy = MagicMock()
         mock_policy.expiry_action = RetentionActionType.ARCHIVE
-        mock_policy.id = 1
+        mock_policy.policy_id = uuid.uuid4()
 
         result = await service.execute_action(
             artifact=artifact,
@@ -384,6 +396,8 @@ class TestRetentionEnforcementService:
         mock_session: AsyncMock,
     ) -> None:
         """Archive action should create archive reference."""
+        import uuid
+
         artifact = EligibleArtifact(
             artifact_type="delivery",
             artifact_ref="del-123",
@@ -392,7 +406,7 @@ class TestRetentionEnforcementService:
         )
         mock_policy = MagicMock()
         mock_policy.expiry_action = RetentionActionType.ARCHIVE
-        mock_policy.id = 1
+        mock_policy.policy_id = uuid.uuid4()
 
         # Mock the audit service
         with patch.object(service._audit_service, "append", new_callable=AsyncMock):
@@ -414,6 +428,8 @@ class TestRetentionEnforcementService:
         mock_session: AsyncMock,
     ) -> None:
         """Delete action should succeed."""
+        import uuid
+
         artifact = EligibleArtifact(
             artifact_type="content_object",
             artifact_ref="co-456",
@@ -422,7 +438,7 @@ class TestRetentionEnforcementService:
         )
         mock_policy = MagicMock()
         mock_policy.expiry_action = RetentionActionType.DELETE
-        mock_policy.id = 2
+        mock_policy.policy_id = uuid.uuid4()
 
         # Mock the audit service
         with patch.object(service._audit_service, "append", new_callable=AsyncMock):
@@ -658,7 +674,7 @@ class TestCreateDefaultCPCEPolicies:
             p for p in policies if p.artifact_type == ArtifactType.DELIVERY.value
         ]
         assert len(delivery_policies) == 1
-        assert delivery_policies[0].retention_days >= 365
+        assert delivery_policies[0].minimum_retention_days >= 365
 
     @pytest.mark.asyncio
     async def test_evidence_policy_meets_cpce_minimum(self) -> None:
@@ -673,7 +689,7 @@ class TestCreateDefaultCPCEPolicies:
             p for p in policies if p.artifact_type == ArtifactType.EVIDENCE_OBJECT.value
         ]
         assert len(evidence_policies) == 1
-        assert evidence_policies[0].retention_days >= 365
+        assert evidence_policies[0].minimum_retention_days >= 365
 
 
 class TestCPCEMinimumRetention:

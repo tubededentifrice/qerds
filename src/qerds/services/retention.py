@@ -156,7 +156,8 @@ class RetentionPolicyService:
 
         policy = RetentionPolicy(
             artifact_type=artifact_type,
-            retention_days=retention_days,
+            minimum_retention_days=retention_days,
+            policy_version="1.0",
             expiry_action=expiry_action,
             description=description,
             is_active=is_active,
@@ -174,17 +175,26 @@ class RetentionPolicyService:
 
         return policy
 
-    async def get_policy(self, policy_id: int) -> RetentionPolicy | None:
+    async def get_policy(self, policy_id: str) -> RetentionPolicy | None:
         """Get a retention policy by ID.
 
         Args:
-            policy_id: The policy's database ID.
+            policy_id: The policy's UUID.
 
         Returns:
             The RetentionPolicy if found, None otherwise.
         """
+        import uuid as uuid_module
+
+        try:
+            policy_uuid = (
+                uuid_module.UUID(policy_id) if isinstance(policy_id, str) else policy_id
+            )
+        except ValueError:
+            return None
+
         result = await self._session.execute(
-            select(RetentionPolicy).where(RetentionPolicy.id == policy_id)
+            select(RetentionPolicy).where(RetentionPolicy.policy_id == policy_uuid)
         )
         return result.scalar_one_or_none()
 
@@ -210,11 +220,11 @@ class RetentionPolicyService:
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
-    async def deactivate_policy(self, policy_id: int) -> bool:
+    async def deactivate_policy(self, policy_id: str) -> bool:
         """Deactivate a retention policy.
 
         Args:
-            policy_id: The policy's database ID.
+            policy_id: The policy's UUID.
 
         Returns:
             True if policy was deactivated, False if not found.
@@ -226,7 +236,7 @@ class RetentionPolicyService:
         policy.is_active = False
         await self._session.flush()
 
-        logger.info("Deactivated retention policy: id=%d", policy_id)
+        logger.info("Deactivated retention policy: id=%s", policy_id)
         return True
 
     def calculate_retention_deadline(
@@ -303,7 +313,7 @@ class RetentionEnforcementService:
             List of EligibleArtifact objects ready for action.
         """
         now = datetime.now(UTC)
-        cutoff_date = now - timedelta(days=policy.retention_days)
+        cutoff_date = now - timedelta(days=policy.minimum_retention_days)
 
         # For now, return empty list - actual implementation will query
         # specific tables based on artifact_type
@@ -369,12 +379,13 @@ class RetentionEnforcementService:
 
             # Record the action
             action_record = RetentionAction(
-                policy_id=policy.id,
+                policy_id=policy.policy_id,
                 artifact_type=artifact.artifact_type,
                 artifact_ref=artifact.artifact_ref,
                 action_type=action_type,
                 executed_at=datetime.now(UTC),
                 executed_by=executor,
+                result="success",
                 archive_ref=archive_ref,
             )
             self._session.add(action_record)
@@ -391,7 +402,7 @@ class RetentionEnforcementService:
                     "artifact_type": artifact.artifact_type,
                     "artifact_ref": artifact.artifact_ref,
                     "action": action_type.value,
-                    "policy_id": policy.id,
+                    "policy_id": str(policy.policy_id),
                     "archive_ref": archive_ref,
                 },
                 summary={

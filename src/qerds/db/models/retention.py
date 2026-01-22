@@ -11,7 +11,7 @@ from datetime import datetime  # noqa: TC003
 
 from sqlalchemy import BigInteger, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from qerds.db.models.base import (
     Base,
@@ -67,6 +67,11 @@ class RetentionPolicy(Base):
     # Policy metadata (additional rules, exceptions, etc.)
     policy_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # Relationship to actions
+    actions: Mapped[list[RetentionAction]] = relationship(
+        "RetentionAction", back_populates="policy"
+    )
+
     __table_args__ = (
         Index("ix_retention_policies_artifact_type", "artifact_type"),
         Index("ix_retention_policies_is_active", "is_active"),
@@ -105,6 +110,9 @@ class RetentionAction(Base):
         UUID(as_uuid=True),
         ForeignKey("retention_policies.policy_id", ondelete="SET NULL"),
         nullable=True,
+    )
+    policy: Mapped[RetentionPolicy | None] = relationship(
+        "RetentionPolicy", back_populates="actions"
     )
 
     # When the action was executed

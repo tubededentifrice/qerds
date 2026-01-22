@@ -73,6 +73,11 @@ class AuditEventType(Enum):
     MAINTENANCE_STARTED = "maintenance_started"
     MAINTENANCE_COMPLETED = "maintenance_completed"
 
+    # Data lifecycle events
+    DATA_EXPORTED = "data_exported"
+    DATA_DELETED = "data_deleted"
+    RETENTION_ENFORCED = "retention_enforced"
+
 
 @dataclass(frozen=True, slots=True)
 class AuditLogEntry:
