@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="generator" content="QERDS PDF Generator v{{ generator_version }}">
+    <title>{% block title %}Document QERDS{% endblock %}</title>
+    <style>
+        {% block inline_styles %}
+        /* Base PDF styles - A4 format with proper margins */
+        @page {
+            size: A4;
+            margin: 20mm 15mm 25mm 15mm;
+
+            @top-center {
+                content: "{% block page_header %}{% endblock %}";
+                font-size: 9pt;
+                color: #666666;
+            }
+
+            @bottom-left {
+                content: "QERDS - {% if is_qualified %}Service Qualifie eIDAS{% else %}Mode developpement - Non qualifie{% endif %}";
+                font-size: 8pt;
+                color: #666666;
+            }
+
+            @bottom-right {
+                content: "Page " counter(page) " / " counter(pages);
+                font-size: 8pt;
+                color: #666666;
+            }
+        }
+
+        /* First page has different header */
+        @page :first {
+            @top-center {
+                content: "";
+            }
+        }
+        {% endblock %}
+    </style>
+</head>
+<body class="pdf-document {% block body_class %}{% endblock %}">
+    {% block document_header %}
+    <header class="document-header">
+        <div class="header-brand">
+            <div class="brand-logo">
+                <!-- Simplified envelope icon for PDF -->
+                <svg class="logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+                    <rect x="4" y="8" width="40" height="32" rx="2" stroke="#000091" stroke-width="2.5"/>
+                    <path d="M4 14L24 28L44 14" stroke="#000091" stroke-width="2.5" stroke-linecap="round"/>
+                    {% if is_qualified %}
+                    <circle cx="38" cy="14" r="6" fill="#18753c"/>
+                    <path d="M35 14L37 16L41 12" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    {% else %}
+                    <circle cx="38" cy="14" r="6" fill="#b34000"/>
+                    <path d="M36 12L40 16M40 12L36 16" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                    {% endif %}
+                </svg>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">QERDS</span>
+                <span class="brand-tagline">Lettre Recommandee Electronique {% if is_qualified %}Qualifiee{% else %}(Dev){% endif %}</span>
+            </div>
+        </div>
+        <div class="header-qualification">
+            {% if is_qualified %}
+            <span class="qualification-badge qualification-badge--qualified">
+                Service Qualifie eIDAS
+            </span>
+            {% else %}
+            <span class="qualification-badge qualification-badge--dev">
+                Mode developpement - Non qualifie
+            </span>
+            {% endif %}
+        </div>
+    </header>
+    {% endblock %}
+
+    <main class="document-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block document_footer %}
+    <footer class="document-footer">
+        <div class="footer-legal">
+            <p class="footer-verification">
+                Ce document a ete genere le {{ generated_at|format_datetime }}.
+                {% block verification_info %}{% endblock %}
+            </p>
+            {% if not is_qualified %}
+            <p class="footer-warning">
+                <strong>ATTENTION :</strong> Ce document a ete genere en mode developpement
+                et n'a pas de valeur juridique. Il ne constitue pas une preuve qualifiee
+                au sens du reglement eIDAS.
+            </p>
+            {% endif %}
+        </div>
+    </footer>
+    {% endblock %}
+</body>
+</html>

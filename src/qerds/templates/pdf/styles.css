@@ -1,0 +1,408 @@
+/* ==========================================================================
+   QERDS PDF Stylesheet
+   Styles for PDF proof generation - matches web UI design tokens
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   CSS Custom Properties (Design Tokens)
+   Aligned with mocks/static/css/main.css for consistency
+   -------------------------------------------------------------------------- */
+:root {
+    /* French Government Color Palette */
+    --color-france-blue: #000091;
+    --color-france-blue-light: #1212ff;
+    --color-france-red: #e1000f;
+
+    /* Semantic Colors */
+    --color-primary: var(--color-france-blue);
+    --color-success: #18753c;
+    --color-success-light: #b8fec9;
+    --color-warning: #b34000;
+    --color-warning-light: #ffe9e6;
+    --color-danger: var(--color-france-red);
+    --color-info: #0063cb;
+    --color-info-light: #e8edff;
+
+    /* Neutral Palette */
+    --color-grey-950: #161616;
+    --color-grey-600: #666666;
+    --color-grey-300: #cecece;
+    --color-grey-200: #e5e5e5;
+    --color-grey-100: #eeeeee;
+    --color-white: #ffffff;
+
+    /* Text Colors */
+    --text-primary: var(--color-grey-950);
+    --text-secondary: var(--color-grey-600);
+
+    /* Typography - Using system fonts for PDF reliability */
+    --font-sans: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
+    --font-serif: 'Liberation Serif', 'DejaVu Serif', Georgia, serif;
+    --font-mono: 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+
+    /* Font Sizes for print (in pt) */
+    --text-xs: 8pt;
+    --text-sm: 9pt;
+    --text-base: 10pt;
+    --text-lg: 11pt;
+    --text-xl: 12pt;
+    --text-2xl: 14pt;
+    --text-3xl: 16pt;
+    --text-4xl: 20pt;
+
+    /* Spacing */
+    --space-1: 2mm;
+    --space-2: 4mm;
+    --space-3: 6mm;
+    --space-4: 8mm;
+    --space-6: 12mm;
+    --space-8: 16mm;
+}
+
+/* --------------------------------------------------------------------------
+   Base Styles
+   -------------------------------------------------------------------------- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    line-height: 1.25;
+    margin-bottom: var(--space-2);
+}
+
+h1 { font-size: var(--text-4xl); }
+h2 { font-size: var(--text-3xl); }
+h3 { font-size: var(--text-2xl); }
+h4 { font-size: var(--text-xl); }
+
+p {
+    margin-bottom: var(--space-2);
+}
+
+/* --------------------------------------------------------------------------
+   Document Structure
+   -------------------------------------------------------------------------- */
+.pdf-document {
+    padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Document Header
+   -------------------------------------------------------------------------- */
+.document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-4);
+    border-bottom: 2px solid var(--color-primary);
+}
+
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.brand-logo {
+    flex-shrink: 0;
+}
+
+.logo-icon {
+    width: 36px;
+    height: 36px;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.brand-name {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--color-primary);
+    letter-spacing: 0.5px;
+}
+
+.brand-tagline {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.header-qualification {
+    text-align: right;
+}
+
+/* --------------------------------------------------------------------------
+   Qualification Badges
+   -------------------------------------------------------------------------- */
+.qualification-badge {
+    display: inline-block;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    border-radius: 4px;
+}
+
+.qualification-badge--qualified {
+    background-color: var(--color-success-light);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+}
+
+.qualification-badge--dev {
+    background-color: var(--color-warning-light);
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Document Content
+   -------------------------------------------------------------------------- */
+.document-content {
+    min-height: 180mm; /* Ensure content area fills most of A4 page */
+}
+
+.document-title {
+    font-size: var(--text-3xl);
+    color: var(--color-primary);
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--color-grey-200);
+}
+
+.document-subtitle {
+    font-size: var(--text-lg);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-4);
+}
+
+/* --------------------------------------------------------------------------
+   Info Sections
+   -------------------------------------------------------------------------- */
+.info-section {
+    margin-bottom: var(--space-4);
+}
+
+.info-section-title {
+    font-size: var(--text-lg);
+    color: var(--color-primary);
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--color-grey-200);
+}
+
+.info-grid {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.info-row {
+    display: table-row;
+}
+
+.info-label,
+.info-value {
+    display: table-cell;
+    padding: var(--space-1) var(--space-2);
+    border-bottom: 1px solid var(--color-grey-100);
+}
+
+.info-label {
+    width: 40%;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background-color: var(--color-grey-100);
+}
+
+.info-value {
+    width: 60%;
+}
+
+/* --------------------------------------------------------------------------
+   Data Tables
+   -------------------------------------------------------------------------- */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-4);
+}
+
+.data-table th,
+.data-table td {
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    border: 1px solid var(--color-grey-200);
+}
+
+.data-table th {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+    font-weight: 600;
+}
+
+.data-table tr:nth-child(even) {
+    background-color: var(--color-grey-100);
+}
+
+/* --------------------------------------------------------------------------
+   Status Indicators
+   -------------------------------------------------------------------------- */
+.status-badge {
+    display: inline-block;
+    padding: 1mm 3mm;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    border-radius: 3px;
+}
+
+.status-badge--success {
+    background-color: var(--color-success-light);
+    color: var(--color-success);
+}
+
+.status-badge--warning {
+    background-color: var(--color-warning-light);
+    color: var(--color-warning);
+}
+
+.status-badge--error {
+    background-color: #ffe9e6;
+    color: var(--color-danger);
+}
+
+.status-badge--info {
+    background-color: var(--color-info-light);
+    color: var(--color-info);
+}
+
+/* --------------------------------------------------------------------------
+   Seal Visualization
+   -------------------------------------------------------------------------- */
+.seal-section {
+    margin: var(--space-4) 0;
+    padding: var(--space-3);
+    border: 2px solid var(--color-grey-300);
+    border-radius: 4px;
+    background-color: var(--color-grey-100);
+}
+
+.seal-qualified {
+    border-color: var(--color-success);
+    background-color: var(--color-success-light);
+}
+
+.seal-non-qualified {
+    border-color: var(--color-warning);
+    background-color: var(--color-warning-light);
+}
+
+.seal-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    margin-bottom: var(--space-2);
+}
+
+.seal-qualified .seal-title {
+    color: var(--color-success);
+}
+
+.seal-non-qualified .seal-title {
+    color: var(--color-warning);
+}
+
+.seal-details {
+    font-size: var(--text-sm);
+}
+
+.seal-details dt {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.seal-details dd {
+    margin-bottom: var(--space-1);
+    margin-left: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Cryptographic Data Display
+   -------------------------------------------------------------------------- */
+.crypto-data {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    background-color: var(--color-grey-100);
+    padding: var(--space-2);
+    border-radius: 3px;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Document Footer
+   -------------------------------------------------------------------------- */
+.document-footer {
+    margin-top: var(--space-6);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-grey-200);
+}
+
+.footer-legal {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.footer-verification {
+    margin-bottom: var(--space-2);
+}
+
+.footer-warning {
+    padding: var(--space-2);
+    background-color: var(--color-warning-light);
+    border: 1px solid var(--color-warning);
+    border-radius: 3px;
+    color: var(--color-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Page Break Controls
+   -------------------------------------------------------------------------- */
+.page-break-before {
+    page-break-before: always;
+}
+
+.page-break-after {
+    page-break-after: always;
+}
+
+.avoid-break {
+    page-break-inside: avoid;
+}
+
+/* --------------------------------------------------------------------------
+   Utility Classes
+   -------------------------------------------------------------------------- */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text-secondary); }
+.text-small { font-size: var(--text-sm); }
+.text-mono { font-family: var(--font-mono); }
+
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
