@@ -289,6 +289,18 @@ class RoleBindingExport(BaseModel):
     reason: str | None = Field(None, description="Documented reason for binding")
 
 
+class PermissionChangeRecord(BaseModel):
+    """Record of a permission/role change from audit history."""
+
+    timestamp: datetime = Field(..., description="When the change occurred")
+    actor_id: str = Field(..., description="Who made the change")
+    actor_type: str = Field(..., description="Type of actor (admin_user, system)")
+    target_user_id: str = Field(..., description="User/client affected by the change")
+    action: str = Field(..., description="Action: assign or revoke")
+    role: str = Field(..., description="Role that was assigned/revoked")
+    details: dict[str, Any] | None = Field(None, description="Additional change details")
+
+
 class AccessReviewExportResponse(BaseModel):
     """Response schema for access review export."""
 
@@ -303,6 +315,9 @@ class AccessReviewExportResponse(BaseModel):
     )
     inactive_clients: list[UUID] = Field(
         default_factory=list, description="Clients with no activity in review period"
+    )
+    permission_changes: list[PermissionChangeRecord] = Field(
+        default_factory=list, description="History of permission changes from audit log"
     )
 
 
