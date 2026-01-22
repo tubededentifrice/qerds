@@ -3,8 +3,8 @@
 Handles operational and administrative endpoints.
 All endpoints require admin authentication and RBAC.
 
-Covers requirements: REQ-A02, REQ-D02, REQ-D08, REQ-D09, REQ-H01, REQ-H03,
-REQ-H04, REQ-H05, REQ-H06, REQ-H08, REQ-H10
+Covers requirements: REQ-A02, REQ-D02, REQ-D05, REQ-D06, REQ-D08, REQ-D09, REQ-H01, REQ-H03,
+                     REQ-H04, REQ-H05, REQ-H06, REQ-H08, REQ-H09, REQ-H10
 See specs/implementation/35-apis.md for API design.
 """
 
@@ -18,10 +18,12 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any
 
 if TYPE_CHECKING:
+    from qerds.db.models.audit import VulnerabilityEvidence
     from qerds.services.conformity_package import ConformityPackageService
     from qerds.services.dr_evidence import DREvidenceRecord, DREvidenceService
+    from qerds.services.vulnerability_evidence import VulnerabilityEvidenceService
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -54,13 +56,17 @@ from qerds.api.schemas.admin import (
     IncidentResponse,
     IncidentTimelineEvent,
     PartyInfoResponse,
+    PentestReportUploadRequest,
     PermissionChangeRecord,
     RecordBackupExecutionRequest,
     RecordDRDrillRequest,
     RecordRestoreTestRequest,
+    RemediationArtifactUploadRequest,
+    RemediationStatusUpdateRequest,
     RoleBindingExport,
     RPOTargetSchema,
     RTOTargetSchema,
+    SBOMUploadRequest,
     StorageStats,
     SystemStatsResponse,
     TimelineEventSummary,
@@ -68,6 +74,9 @@ from qerds.api.schemas.admin import (
     TraceabilityEntryResponse,
     TraceabilityMatrixResponse,
     UserStats,
+    VulnerabilityEvidenceListResponse,
+    VulnerabilityEvidenceResponse,
+    VulnScanUploadRequest,
 )
 from qerds.db.models.base import QualificationLabel
 from qerds.db.models.deliveries import ContentObject, Delivery
@@ -2014,3 +2023,616 @@ def _convert_record_to_response(record: DREvidenceRecord) -> DREvidenceRecordRes
         record_hash=record.record_hash,
         created_at=record.created_at,
     )
+
+
+# -----------------------------------------------------------------------------
+# Vulnerability Evidence Management (REQ-D05, REQ-D06, REQ-H09)
+# -----------------------------------------------------------------------------
+
+
+async def get_vulnerability_evidence_service(
+    db: DbSession,
+) -> VulnerabilityEvidenceService:
+    """Get the vulnerability evidence service with required dependencies.
+
+    Initializes the object store for evidence storage.
+
+    Returns:
+        Configured VulnerabilityEvidenceService instance.
+    """
+    from qerds.core.settings import get_settings
+    from qerds.services.storage import ObjectStoreClient
+    from qerds.services.vulnerability_evidence import VulnerabilityEvidenceService
+
+    settings = get_settings()
+    object_store = ObjectStoreClient.from_settings(settings.s3)
+
+    return VulnerabilityEvidenceService(db, object_store)
+
+
+def _evidence_to_response(evidence: VulnerabilityEvidence) -> VulnerabilityEvidenceResponse:
+    """Convert VulnerabilityEvidence model to response schema."""
+    return VulnerabilityEvidenceResponse(
+        vuln_evidence_id=evidence.vuln_evidence_id,
+        artifact_type=evidence.artifact_type.value,
+        title=evidence.title,
+        description=evidence.description,
+        created_at=evidence.created_at,
+        uploaded_by=evidence.uploaded_by,
+        storage_ref=evidence.storage_ref,
+        content_hash=evidence.content_hash,
+        content_type=evidence.content_type,
+        size_bytes=evidence.size_bytes,
+        original_filename=evidence.original_filename,
+        reporting_period=evidence.reporting_period,
+        scan_tool=evidence.scan_tool,
+        scan_tool_version=evidence.scan_tool_version,
+        scan_output_format=(
+            evidence.scan_output_format.value if evidence.scan_output_format else None
+        ),
+        trivy_db_digest=evidence.trivy_db_digest,
+        trivy_db_tag=evidence.trivy_db_tag,
+        sbom_format=evidence.sbom_format.value if evidence.sbom_format else None,
+        scan_scope=evidence.scan_scope,
+        pentest_firm=evidence.pentest_firm,
+        pentest_start_date=evidence.pentest_start_date,
+        pentest_end_date=evidence.pentest_end_date,
+        pentest_methodology=evidence.pentest_methodology,
+        findings_summary=evidence.findings_summary,
+        remediation_status=evidence.remediation_status,
+        remediation_due_date=evidence.remediation_due_date,
+        remediation_completed_at=evidence.remediation_completed_at,
+        parent_evidence_id=evidence.parent_evidence_id,
+        include_in_audit_pack=evidence.include_in_audit_pack,
+    )
+
+
+@router.post(
+    "/vulnerability-evidence/vuln-scan",
+    response_model=VulnerabilityEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload vulnerability scan report",
+    description="Upload a quarterly vulnerability scan report (REQ-D05, REQ-H09).",
+)
+async def upload_vuln_scan(
+    request_body: VulnScanUploadRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    file: Annotated[UploadFile, File(description="Scan report file (JSON/SARIF)")],
+) -> VulnerabilityEvidenceResponse:
+    """Upload a vulnerability scan report.
+
+    Stores quarterly vulnerability scan reports as required by REQ-D05.
+    Supports Trivy with air-gap mode via DB digest tracking.
+
+    Args:
+        request_body: Scan metadata.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        file: The scan report file.
+
+    Returns:
+        Created vulnerability evidence record.
+    """
+    from qerds.db.models.audit import ScanOutputFormat
+    from qerds.services.vulnerability_evidence import VulnScanMetadata
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="upload_vuln_scan",
+        target_type="vulnerability_evidence",
+        target_id=request_body.reporting_period,
+        details={
+            "title": request_body.title,
+            "scan_tool": request_body.scan_tool,
+            "reporting_period": request_body.reporting_period,
+        },
+    )
+
+    # Read file content
+    data = await file.read()
+
+    # Map output format
+    format_map = {
+        "trivy_json": ScanOutputFormat.TRIVY_JSON,
+        "sarif": ScanOutputFormat.SARIF,
+        "cyclonedx": ScanOutputFormat.CYCLONEDX,
+    }
+    output_format = format_map.get(request_body.scan_output_format, ScanOutputFormat.TRIVY_JSON)
+
+    scan_metadata = VulnScanMetadata(
+        scan_tool=request_body.scan_tool,
+        scan_tool_version=request_body.scan_tool_version,
+        scan_output_format=output_format,
+        trivy_db_digest=request_body.trivy_db_digest,
+        trivy_db_tag=request_body.trivy_db_tag,
+        scan_scope=request_body.scan_scope,
+    )
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.store_vuln_scan(
+            data=data,
+            title=request_body.title,
+            uploaded_by=str(user.principal_id),
+            reporting_period=request_body.reporting_period,
+            scan_metadata=scan_metadata,
+            content_type=file.content_type or "application/json",
+            original_filename=file.filename,
+            description=request_body.description,
+            findings_summary=request_body.findings_summary,
+        )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except Exception as e:
+        logger.exception("Failed to upload vulnerability scan: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload vulnerability scan: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/vulnerability-evidence/sbom",
+    response_model=VulnerabilityEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload SBOM",
+    description="Upload a Software Bill of Materials (REQ-H09).",
+)
+async def upload_sbom(
+    request_body: SBOMUploadRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    file: Annotated[UploadFile, File(description="SBOM file")],
+) -> VulnerabilityEvidenceResponse:
+    """Upload a Software Bill of Materials.
+
+    Stores SBOMs as part of vulnerability management evidence (REQ-H09).
+
+    Args:
+        request_body: SBOM metadata.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        file: The SBOM file.
+
+    Returns:
+        Created vulnerability evidence record.
+    """
+    from qerds.db.models.audit import SBOMFormat
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="upload_sbom",
+        target_type="vulnerability_evidence",
+        target_id=request_body.title,
+        details={
+            "sbom_format": request_body.sbom_format,
+        },
+    )
+
+    data = await file.read()
+
+    # Map SBOM format
+    format_map = {
+        "cyclonedx_json": SBOMFormat.CYCLONEDX_JSON,
+        "cyclonedx_xml": SBOMFormat.CYCLONEDX_XML,
+        "spdx_json": SBOMFormat.SPDX_JSON,
+        "spdx_rdf": SBOMFormat.SPDX_RDF,
+    }
+    sbom_format = format_map.get(request_body.sbom_format, SBOMFormat.CYCLONEDX_JSON)
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.store_sbom(
+            data=data,
+            title=request_body.title,
+            uploaded_by=str(user.principal_id),
+            sbom_format=sbom_format,
+            content_type=file.content_type or "application/json",
+            original_filename=file.filename,
+            description=request_body.description,
+            reporting_period=request_body.reporting_period,
+        )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except Exception as e:
+        logger.exception("Failed to upload SBOM: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload SBOM: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/vulnerability-evidence/pentest",
+    response_model=VulnerabilityEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload pentest report",
+    description="Upload an annual penetration test report (REQ-D06, REQ-H09).",
+)
+async def upload_pentest_report(
+    request_body: PentestReportUploadRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    file: Annotated[UploadFile, File(description="Pentest report file (typically PDF)")],
+) -> VulnerabilityEvidenceResponse:
+    """Upload a penetration test report.
+
+    Stores annual pentest reports as required by REQ-D06.
+
+    Args:
+        request_body: Pentest metadata.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        file: The pentest report file.
+
+    Returns:
+        Created vulnerability evidence record.
+    """
+    from qerds.services.vulnerability_evidence import PentestMetadata
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="upload_pentest_report",
+        target_type="vulnerability_evidence",
+        target_id=request_body.title,
+        details={
+            "pentest_firm": request_body.pentest_firm,
+            "start_date": request_body.start_date.isoformat(),
+            "end_date": request_body.end_date.isoformat(),
+        },
+    )
+
+    data = await file.read()
+
+    pentest_metadata = PentestMetadata(
+        pentest_firm=request_body.pentest_firm,
+        start_date=request_body.start_date,
+        end_date=request_body.end_date,
+        methodology=request_body.methodology,
+    )
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.store_pentest_report(
+            data=data,
+            title=request_body.title,
+            uploaded_by=str(user.principal_id),
+            pentest_metadata=pentest_metadata,
+            content_type=file.content_type or "application/pdf",
+            original_filename=file.filename,
+            description=request_body.description,
+            findings_summary=request_body.findings_summary,
+        )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except Exception as e:
+        logger.exception("Failed to upload pentest report: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload pentest report: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/vulnerability-evidence/remediation",
+    response_model=VulnerabilityEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload remediation artifact",
+    description="Upload a remediation plan, evidence, or exception (REQ-H09).",
+)
+async def upload_remediation_artifact(
+    request_body: RemediationArtifactUploadRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    file: Annotated[UploadFile, File(description="Remediation artifact file")],
+) -> VulnerabilityEvidenceResponse:
+    """Upload a remediation tracking artifact.
+
+    Stores remediation plans, closure evidence, and exceptions.
+
+    Args:
+        request_body: Remediation artifact metadata.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        file: The artifact file.
+
+    Returns:
+        Created vulnerability evidence record.
+    """
+    from qerds.db.models.audit import VulnArtifactType
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="upload_remediation_artifact",
+        target_type="vulnerability_evidence",
+        target_id=request_body.title,
+        details={
+            "artifact_type": request_body.artifact_type,
+            "parent_evidence_id": (
+                str(request_body.parent_evidence_id) if request_body.parent_evidence_id else None
+            ),
+        },
+    )
+
+    data = await file.read()
+
+    # Map artifact type
+    type_map = {
+        "remediation_plan": VulnArtifactType.REMEDIATION_PLAN,
+        "remediation_evidence": VulnArtifactType.REMEDIATION_EVIDENCE,
+        "exception": VulnArtifactType.EXCEPTION,
+        "pentest_scope": VulnArtifactType.PENTEST_SCOPE,
+    }
+    artifact_type = type_map.get(request_body.artifact_type, VulnArtifactType.REMEDIATION_PLAN)
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.store_remediation_artifact(
+            data=data,
+            title=request_body.title,
+            uploaded_by=str(user.principal_id),
+            artifact_type=artifact_type,
+            parent_evidence_id=request_body.parent_evidence_id,
+            content_type=file.content_type or "application/pdf",
+            original_filename=file.filename,
+            description=request_body.description,
+            remediation_status=request_body.remediation_status,
+            remediation_due_date=request_body.remediation_due_date,
+        )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except Exception as e:
+        logger.exception("Failed to upload remediation artifact: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload remediation artifact: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/vulnerability-evidence",
+    response_model=VulnerabilityEvidenceListResponse,
+    summary="List vulnerability evidence",
+    description="List vulnerability management evidence artifacts with optional filtering.",
+)
+async def list_vulnerability_evidence(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    artifact_type: Annotated[
+        str | None,
+        Query(
+            description="Filter by artifact type",
+            pattern=r"^(vuln_scan|sbom|pentest_report|pentest_scope|remediation_plan|remediation_evidence|exception)$",
+        ),
+    ] = None,
+    reporting_period: Annotated[str | None, Query(description="Filter by reporting period")] = None,
+    include_in_audit_pack: Annotated[
+        bool | None, Query(description="Filter by audit pack inclusion")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="Maximum results")] = 100,
+    offset: Annotated[int, Query(ge=0, description="Results to skip")] = 0,
+) -> VulnerabilityEvidenceListResponse:
+    """List vulnerability evidence artifacts.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        artifact_type: Filter by artifact type.
+        reporting_period: Filter by reporting period.
+        include_in_audit_pack: Filter by audit pack inclusion flag.
+        limit: Maximum results to return.
+        offset: Number of results to skip.
+
+    Returns:
+        List of vulnerability evidence artifacts.
+    """
+    from qerds.db.models.audit import VulnArtifactType
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="list_vulnerability_evidence",
+        target_type="vulnerability_evidence",
+        target_id="all",
+        details={
+            "artifact_type": artifact_type,
+            "reporting_period": reporting_period,
+        },
+    )
+
+    # Map artifact type string to enum
+    artifact_type_enum = None
+    if artifact_type:
+        type_map = {
+            "vuln_scan": VulnArtifactType.VULN_SCAN,
+            "sbom": VulnArtifactType.SBOM,
+            "pentest_report": VulnArtifactType.PENTEST_REPORT,
+            "pentest_scope": VulnArtifactType.PENTEST_SCOPE,
+            "remediation_plan": VulnArtifactType.REMEDIATION_PLAN,
+            "remediation_evidence": VulnArtifactType.REMEDIATION_EVIDENCE,
+            "exception": VulnArtifactType.EXCEPTION,
+        }
+        artifact_type_enum = type_map.get(artifact_type)
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        artifacts = await service.list_artifacts(
+            artifact_type=artifact_type_enum,
+            reporting_period=reporting_period,
+            include_in_audit_pack=include_in_audit_pack,
+            limit=limit,
+            offset=offset,
+        )
+
+        await db.commit()
+
+        return VulnerabilityEvidenceListResponse(
+            total=len(artifacts),
+            artifacts=[_evidence_to_response(a) for a in artifacts],
+        )
+
+    except Exception as e:
+        logger.exception("Failed to list vulnerability evidence: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list vulnerability evidence: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/vulnerability-evidence/{artifact_id}",
+    response_model=VulnerabilityEvidenceResponse,
+    summary="Get vulnerability evidence artifact",
+    description="Get details of a specific vulnerability evidence artifact.",
+)
+async def get_vulnerability_evidence(
+    artifact_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityEvidenceResponse:
+    """Get a specific vulnerability evidence artifact.
+
+    Args:
+        artifact_id: UUID of the artifact.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Vulnerability evidence artifact details.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="view_vulnerability_evidence",
+        target_type="vulnerability_evidence",
+        target_id=str(artifact_id),
+    )
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.get_artifact(artifact_id)
+
+        if evidence is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vulnerability evidence artifact {artifact_id} not found",
+            )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get vulnerability evidence: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get vulnerability evidence: {e!s}",
+        ) from e
+
+
+@router.patch(
+    "/vulnerability-evidence/{artifact_id}/remediation-status",
+    response_model=VulnerabilityEvidenceResponse,
+    summary="Update remediation status",
+    description="Update the remediation status of a vulnerability evidence artifact.",
+)
+async def update_remediation_status(
+    artifact_id: uuid.UUID,
+    request_body: RemediationStatusUpdateRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityEvidenceResponse:
+    """Update the remediation status of an artifact.
+
+    Args:
+        artifact_id: UUID of the artifact.
+        request_body: New status details.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Updated vulnerability evidence artifact.
+    """
+    from qerds.services.vulnerability_evidence import ArtifactNotFoundError
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="update_remediation_status",
+        target_type="vulnerability_evidence",
+        target_id=str(artifact_id),
+        details={
+            "new_status": request_body.status,
+        },
+    )
+
+    try:
+        service = await get_vulnerability_evidence_service(db)
+        evidence = await service.update_remediation_status(
+            artifact_id,
+            status=request_body.status,
+            completed_at=request_body.completed_at,
+        )
+
+        await db.commit()
+
+        return _evidence_to_response(evidence)
+
+    except ArtifactNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.exception("Failed to update remediation status: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update remediation status: {e!s}",
+        ) from e

@@ -750,3 +750,251 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error type/code")
     message: str = Field(..., description="Human-readable error message")
     details: dict[str, Any] | None = Field(None, description="Additional error details")
+
+
+# -----------------------------------------------------------------------------
+# Vulnerability Evidence Schemas (REQ-D05, REQ-D06, REQ-H09)
+# -----------------------------------------------------------------------------
+
+
+class VulnScanUploadRequest(BaseModel):
+    """Request schema for uploading a vulnerability scan report.
+
+    Used for quarterly vulnerability scan uploads per REQ-D05.
+    Supports Trivy air-gap mode with DB digest tracking.
+    """
+
+    title: str = Field(
+        ...,
+        min_length=5,
+        max_length=255,
+        description="Human-readable title for the scan report",
+    )
+    reporting_period: str = Field(
+        ...,
+        pattern=r"^\d{4}-Q[1-4]$",
+        description="Quarterly reporting period (e.g., '2024-Q1')",
+    )
+    scan_tool: str = Field(
+        "trivy",
+        pattern=r"^[a-z0-9_-]+$",
+        description="Scanning tool used (e.g., 'trivy', 'grype')",
+    )
+    scan_tool_version: str | None = Field(
+        None,
+        max_length=50,
+        description="Version of the scanning tool",
+    )
+    scan_output_format: str = Field(
+        "trivy_json",
+        pattern=r"^(trivy_json|sarif|cyclonedx)$",
+        description="Output format of the scan report",
+    )
+    trivy_db_digest: str | None = Field(
+        None,
+        max_length=128,
+        description="Trivy vulnerability DB digest (for air-gap compliance)",
+    )
+    trivy_db_tag: str | None = Field(
+        None,
+        max_length=100,
+        description="Trivy vulnerability DB tag/version",
+    )
+    scan_scope: dict[str, Any] | None = Field(
+        None,
+        description="Scope of what was scanned (images, repos, targets)",
+    )
+    description: str | None = Field(
+        None,
+        max_length=2000,
+        description="Additional description or notes",
+    )
+    findings_summary: dict[str, Any] | None = Field(
+        None,
+        description="Summary of findings (critical, high, medium, low counts)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SBOMUploadRequest(BaseModel):
+    """Request schema for uploading a Software Bill of Materials.
+
+    SBOMs are included in vulnerability management evidence per REQ-H09.
+    """
+
+    title: str = Field(
+        ...,
+        min_length=5,
+        max_length=255,
+        description="Human-readable title for the SBOM",
+    )
+    sbom_format: str = Field(
+        ...,
+        pattern=r"^(cyclonedx_json|cyclonedx_xml|spdx_json|spdx_rdf)$",
+        description="SBOM format (cyclonedx_json, cyclonedx_xml, spdx_json, spdx_rdf)",
+    )
+    reporting_period: str | None = Field(
+        None,
+        pattern=r"^\d{4}-Q[1-4]$",
+        description="Quarterly period if tied to a scan",
+    )
+    description: str | None = Field(
+        None,
+        max_length=2000,
+        description="Additional description or notes",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PentestReportUploadRequest(BaseModel):
+    """Request schema for uploading a penetration test report.
+
+    Used for annual pentest uploads per REQ-D06.
+    """
+
+    title: str = Field(
+        ...,
+        min_length=5,
+        max_length=255,
+        description="Human-readable title for the pentest report",
+    )
+    pentest_firm: str = Field(
+        ...,
+        min_length=2,
+        max_length=255,
+        description="Name of the firm that conducted the test",
+    )
+    start_date: datetime = Field(
+        ...,
+        description="Start date of the testing engagement",
+    )
+    end_date: datetime = Field(
+        ...,
+        description="End date of the testing engagement",
+    )
+    methodology: str | None = Field(
+        None,
+        max_length=255,
+        description="Testing methodology (e.g., OWASP, PTES)",
+    )
+    description: str | None = Field(
+        None,
+        max_length=2000,
+        description="Additional description or notes",
+    )
+    findings_summary: dict[str, Any] | None = Field(
+        None,
+        description="Summary of findings",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("end_date")
+    @classmethod
+    def validate_date_range(cls, v: datetime, info: Any) -> datetime:
+        """Ensure end_date is not before start_date."""
+        start = info.data.get("start_date")
+        if start and v < start:
+            msg = "end_date must not be before start_date"
+            raise ValueError(msg)
+        return v
+
+
+class RemediationArtifactUploadRequest(BaseModel):
+    """Request schema for uploading a remediation tracking artifact.
+
+    Used for remediation plans, evidence of closure, and exceptions.
+    """
+
+    title: str = Field(
+        ...,
+        min_length=5,
+        max_length=255,
+        description="Human-readable title",
+    )
+    artifact_type: str = Field(
+        ...,
+        pattern=r"^(remediation_plan|remediation_evidence|exception|pentest_scope)$",
+        description="Type of remediation artifact",
+    )
+    parent_evidence_id: UUID | None = Field(
+        None,
+        description="ID of parent artifact (e.g., the scan/pentest report)",
+    )
+    description: str | None = Field(
+        None,
+        max_length=2000,
+        description="Additional description or notes",
+    )
+    remediation_status: str | None = Field(
+        None,
+        pattern=r"^(open|in_progress|closed|excepted)$",
+        description="Current remediation status",
+    )
+    remediation_due_date: datetime | None = Field(
+        None,
+        description="Due date for remediation completion",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class VulnerabilityEvidenceResponse(BaseModel):
+    """Response schema for vulnerability evidence artifacts."""
+
+    vuln_evidence_id: UUID = Field(..., description="Unique artifact identifier")
+    artifact_type: str = Field(..., description="Type of artifact")
+    title: str = Field(..., description="Human-readable title")
+    description: str | None = Field(None, description="Description")
+    created_at: datetime = Field(..., description="Upload timestamp")
+    uploaded_by: str = Field(..., description="Admin who uploaded")
+    storage_ref: str = Field(..., description="Object storage reference")
+    content_hash: str = Field(..., description="SHA-256 hash of content")
+    content_type: str = Field(..., description="MIME type")
+    size_bytes: int = Field(..., description="File size in bytes")
+    original_filename: str | None = Field(None, description="Original filename")
+    reporting_period: str | None = Field(None, description="Reporting period")
+    scan_tool: str | None = Field(None, description="Scanning tool (if scan)")
+    scan_tool_version: str | None = Field(None, description="Tool version")
+    scan_output_format: str | None = Field(None, description="Scan output format")
+    trivy_db_digest: str | None = Field(None, description="Trivy DB digest")
+    trivy_db_tag: str | None = Field(None, description="Trivy DB tag")
+    sbom_format: str | None = Field(None, description="SBOM format (if SBOM)")
+    scan_scope: dict[str, Any] | None = Field(None, description="Scan scope")
+    pentest_firm: str | None = Field(None, description="Pentest firm")
+    pentest_start_date: datetime | None = Field(None, description="Pentest start")
+    pentest_end_date: datetime | None = Field(None, description="Pentest end")
+    pentest_methodology: str | None = Field(None, description="Pentest methodology")
+    findings_summary: dict[str, Any] | None = Field(None, description="Findings summary")
+    remediation_status: str | None = Field(None, description="Remediation status")
+    remediation_due_date: datetime | None = Field(None, description="Remediation due date")
+    remediation_completed_at: datetime | None = Field(
+        None, description="Remediation completion date"
+    )
+    parent_evidence_id: UUID | None = Field(None, description="Parent artifact ID")
+    include_in_audit_pack: bool = Field(..., description="Include in audit packs")
+
+
+class VulnerabilityEvidenceListResponse(BaseModel):
+    """Response schema for listing vulnerability evidence artifacts."""
+
+    total: int = Field(..., description="Total matching artifacts")
+    artifacts: list[VulnerabilityEvidenceResponse] = Field(..., description="Artifacts")
+
+
+class RemediationStatusUpdateRequest(BaseModel):
+    """Request schema for updating remediation status."""
+
+    status: str = Field(
+        ...,
+        pattern=r"^(open|in_progress|closed|excepted)$",
+        description="New remediation status",
+    )
+    completed_at: datetime | None = Field(
+        None,
+        description="Completion timestamp (auto-set if status is 'closed')",
+    )
+
+    model_config = ConfigDict(extra="forbid")

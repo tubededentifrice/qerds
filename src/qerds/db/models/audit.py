@@ -1,14 +1,16 @@
-"""Audit-related models: log records and audit packs.
+"""Audit-related models: log records, audit packs, and vulnerability evidence.
 
 Covers: REQ-C05 (immutability), REQ-D08 (logging), REQ-H01 (exportability),
-        REQ-H03 (audit review)
+        REQ-H03 (audit review), REQ-D05 (vulnerability scanning),
+        REQ-D06 (penetration testing), REQ-H09 (vulnerability management evidence)
 """
 
 from __future__ import annotations
 
+import enum
 import uuid  # noqa: TC003 - required at runtime for SQLAlchemy type resolution
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, Boolean, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +21,58 @@ from qerds.db.models.base import (
     TimestampTZ,
     UUIDPrimaryKey,
 )
+
+
+class VulnArtifactType(enum.Enum):
+    """Types of vulnerability management artifacts (REQ-D05, REQ-D06, REQ-H09).
+
+    Values:
+        VULN_SCAN: Vulnerability scan report (e.g., Trivy JSON/SARIF)
+        SBOM: Software Bill of Materials (CycloneDX/SPDX)
+        PENTEST_REPORT: Annual penetration test report
+        PENTEST_SCOPE: Pentest scope and methodology documentation
+        REMEDIATION_PLAN: Remediation plan for findings
+        REMEDIATION_EVIDENCE: Evidence of remediation completion
+        EXCEPTION: Risk acceptance/exception documentation
+    """
+
+    VULN_SCAN = "vuln_scan"
+    SBOM = "sbom"
+    PENTEST_REPORT = "pentest_report"
+    PENTEST_SCOPE = "pentest_scope"
+    REMEDIATION_PLAN = "remediation_plan"
+    REMEDIATION_EVIDENCE = "remediation_evidence"
+    EXCEPTION = "exception"
+
+
+class SBOMFormat(enum.Enum):
+    """SBOM format types.
+
+    Values:
+        CYCLONEDX_JSON: CycloneDX format in JSON
+        CYCLONEDX_XML: CycloneDX format in XML
+        SPDX_JSON: SPDX format in JSON
+        SPDX_RDF: SPDX format in RDF
+    """
+
+    CYCLONEDX_JSON = "cyclonedx_json"
+    CYCLONEDX_XML = "cyclonedx_xml"
+    SPDX_JSON = "spdx_json"
+    SPDX_RDF = "spdx_rdf"
+
+
+class ScanOutputFormat(enum.Enum):
+    """Vulnerability scan output formats.
+
+    Values:
+        TRIVY_JSON: Trivy native JSON format
+        SARIF: Static Analysis Results Interchange Format
+        CYCLONEDX: CycloneDX vulnerability format
+    """
+
+    TRIVY_JSON = "trivy_json"
+    SARIF = "sarif"
+    CYCLONEDX = "cyclonedx"
 
 
 class AuditLogRecord(Base):
@@ -136,4 +190,104 @@ class AuditPack(Base):
     __table_args__ = (
         Index("ix_audit_packs_range", "range_start", "range_end"),
         Index("ix_audit_packs_generated_at", "generated_at"),
+    )
+
+
+class VulnerabilityEvidence(Base):
+    """Vulnerability management evidence artifact (REQ-D05, REQ-D06, REQ-H09).
+
+    Stores metadata for vulnerability scan reports, SBOMs, penetration test
+    reports, and remediation tracking artifacts. The actual artifact content
+    is stored in object storage and referenced by storage_ref.
+
+    Used to produce audit-ready evidence of vulnerability management activities
+    for conformity assessments per Implementing Regulation 2025/1944.
+    """
+
+    __tablename__ = "vulnerability_evidence"
+
+    vuln_evidence_id: Mapped[UUIDPrimaryKey]
+    created_at: Mapped[TimestampTZ]
+
+    # Artifact classification
+    artifact_type: Mapped[VulnArtifactType] = mapped_column(
+        Enum(VulnArtifactType, name="vuln_artifact_type", create_constraint=True),
+        nullable=False,
+    )
+
+    # Human-readable title and description
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Reference to artifact in object storage
+    storage_ref: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    # Content hash for integrity verification
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # File metadata
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Who uploaded this artifact
+    uploaded_by: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Scan-specific metadata (for vuln_scan type)
+    scan_tool: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    scan_tool_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    scan_output_format: Mapped[ScanOutputFormat | None] = mapped_column(
+        Enum(ScanOutputFormat, name="scan_output_format", create_constraint=True),
+        nullable=True,
+    )
+
+    # Trivy-specific metadata for air-gap compliance (REQ-H09)
+    trivy_db_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trivy_db_tag: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # SBOM-specific metadata
+    sbom_format: Mapped[SBOMFormat | None] = mapped_column(
+        Enum(SBOMFormat, name="sbom_format", create_constraint=True),
+        nullable=True,
+    )
+
+    # Scan scope and targets (images, containers, repos scanned)
+    scan_scope: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # For quarterly scans, which quarter this covers (e.g., "2024-Q1")
+    reporting_period: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Pentest-specific metadata
+    pentest_firm: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pentest_start_date: Mapped[OptionalTimestampTZ]
+    pentest_end_date: Mapped[OptionalTimestampTZ]
+    pentest_methodology: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Findings summary (parsed from report)
+    findings_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Remediation tracking
+    remediation_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    remediation_due_date: Mapped[OptionalTimestampTZ]
+    remediation_completed_at: Mapped[OptionalTimestampTZ]
+
+    # Link to parent artifact (e.g., remediation plan links to pentest report)
+    parent_evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("vulnerability_evidence.vuln_evidence_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Whether this artifact is included in audit pack exports by default
+    include_in_audit_pack: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Additional artifact-specific metadata
+    extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index("ix_vuln_evidence_artifact_type", "artifact_type"),
+        Index("ix_vuln_evidence_created_at", "created_at"),
+        Index("ix_vuln_evidence_reporting_period", "reporting_period"),
+        Index("ix_vuln_evidence_parent", "parent_evidence_id"),
+        Index("ix_vuln_evidence_audit_pack", "include_in_audit_pack"),
     )
