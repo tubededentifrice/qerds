@@ -62,6 +62,73 @@ When there’s any non-obvious decision or uncertainty (architecture, security m
 - Pre-commit hooks must enforce ruff
 - CI must fail on ruff violations
 
+## Git Worktrees (CRITICAL - Read Before Using)
+
+When running parallel tasks with git worktrees, follow these rules **exactly** to avoid data loss.
+
+### Worktree Creation Rules
+
+1. **Create worktrees OUTSIDE the `.git/` directory**:
+   ```bash
+   # CORRECT - create in a sibling directory
+   git worktree add ../qerds-worktrees/task-name feature/task-name
+
+   # WRONG - never create inside .git/
+   git worktree add .git/worktrees/task-name feature/task-name  # DON'T DO THIS
+   ```
+
+2. **Use absolute paths** to avoid confusion:
+   ```bash
+   git worktree add /home/ubuntu/git/qerds-worktrees/qerds-abc feature/qerds-abc
+   ```
+
+### NEVER Delete These Files
+
+When working in a worktree, you may see these files in `git status`:
+- `HEAD`, `ORIG_HEAD`, `FETCH_HEAD`
+- `gitdir`, `commondir`
+- `index`, `index.lock`
+
+**These are CRITICAL git infrastructure files, NOT artifacts to clean up.**
+
+⚠️ **NEVER run `rm` on these files** - doing so destroys the worktree and loses all uncommitted work.
+
+### Commit Early and Often in Worktrees
+
+Uncommitted work in a worktree is **not protected by git**. If the worktree is damaged, uncommitted changes are lost.
+
+```bash
+# In worktree: commit work frequently
+git add -A
+git commit -m "WIP: partial implementation"
+git push -u origin feature/task-name
+```
+
+### Worktree Cleanup (Safe Method)
+
+```bash
+# List worktrees
+git worktree list
+
+# Remove a worktree SAFELY (preserves commits on the branch)
+git worktree remove /path/to/worktree
+
+# Clean up stale worktree references
+git worktree prune -v
+```
+
+### Recovery if Worktree is Damaged
+
+If a worktree becomes corrupted:
+1. **Don't panic** - committed work is safe in the branch
+2. Run `git worktree prune` from the main repo
+3. Re-create the worktree: `git worktree add <path> <branch>`
+4. Your committed changes will be there
+
+### Shell Working Directory
+
+If your shell's working directory is inside a worktree that gets deleted, **all bash commands will fail**. Recovery requires starting a new session with a valid working directory.
+
 ## Beads (bd) Issue Tracking
 
 This project uses **bd** (beads) for issue tracking. All work must be tracked.

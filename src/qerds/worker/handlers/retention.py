@@ -6,19 +6,22 @@ This handler enforces retention policies by:
 - Finding artifacts that have exceeded their retention period
 - Archiving or deleting them per policy configuration
 - Creating audit trail records for compliance
+
+The actual enforcement logic is delegated to RetentionEnforcementService
+to avoid code duplication and maintain testability.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
-
 from qerds.db.models.base import AuditStream, RetentionActionType
-from qerds.db.models.retention import RetentionAction, RetentionPolicy
 from qerds.services.audit_log import AuditEventType, AuditLogService
+from qerds.services.retention import (
+    RetentionEnforcementService,
+    RetentionPolicyService,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,10 +64,13 @@ async def enforce_retention_handler(
     dry_run = payload.get("dry_run", False)
     batch_size = payload.get("batch_size", 100)
 
-    now = datetime.now(UTC)
+    # Initialize services
+    policy_service = RetentionPolicyService(session)
+    enforcement_service = RetentionEnforcementService(session)
+    audit_service = AuditLogService(session)
 
     # Load active retention policies
-    policies = await _get_active_policies(session, artifact_type)
+    policies = await policy_service.get_active_policies(artifact_type=artifact_type)
 
     if not policies:
         logger.info("No active retention policies found")
@@ -81,24 +87,49 @@ async def enforce_retention_handler(
     actions_taken: list[dict[str, Any]] = []
 
     for policy in policies:
-        result = await _enforce_policy(
-            session=session,
-            policy=policy,
-            now=now,
-            dry_run=dry_run,
-            batch_size=batch_size - total_processed,
-        )
-
-        total_processed += result["processed"]
-        total_archived += result["archived"]
-        total_deleted += result["deleted"]
-        actions_taken.extend(result["actions"])
-
-        if total_processed >= batch_size:
+        # Find eligible artifacts for this policy
+        remaining_batch = batch_size - total_processed
+        if remaining_batch <= 0:
             break
 
+        eligible_artifacts = await enforcement_service.find_eligible_artifacts(
+            policy=policy,
+            limit=remaining_batch,
+        )
+
+        # Process each eligible artifact
+        for artifact in eligible_artifacts:
+            result = await enforcement_service.execute_action(
+                artifact=artifact,
+                policy=policy,
+                dry_run=dry_run,
+                executor="worker:retention",
+            )
+
+            total_processed += 1
+
+            if result.success:
+                if policy.expiry_action == RetentionActionType.ARCHIVE:
+                    total_archived += 1
+                elif policy.expiry_action == RetentionActionType.DELETE:
+                    total_deleted += 1
+
+            actions_taken.append(
+                {
+                    "artifact_type": artifact.artifact_type,
+                    "artifact_ref": artifact.artifact_ref,
+                    "action": policy.expiry_action.value,
+                    "success": result.success,
+                    "archive_ref": result.archive_ref,
+                    "error": result.error_message,
+                    "dry_run": dry_run,
+                }
+            )
+
+            if total_processed >= batch_size:
+                break
+
     # Log enforcement summary to audit trail
-    audit_service = AuditLogService(session)
     await audit_service.append(
         stream=AuditStream.OPS,
         event_type=AuditEventType.MAINTENANCE_COMPLETED,
@@ -134,283 +165,5 @@ async def enforce_retention_handler(
         "deleted": total_deleted,
         "dry_run": dry_run,
         "policies_evaluated": len(policies),
-        "actions": actions_taken[:10],  # Limit for response size
+        "actions": actions_taken[:10],  # Limit response size
     }
-
-
-async def _get_active_policies(
-    session: AsyncSession,
-    artifact_type: str | None = None,
-) -> list[RetentionPolicy]:
-    """Get active retention policies.
-
-    Args:
-        session: Database session.
-        artifact_type: Optional filter for specific artifact type.
-
-    Returns:
-        List of active RetentionPolicy objects.
-    """
-    stmt = select(RetentionPolicy).where(RetentionPolicy.is_active.is_(True))
-
-    if artifact_type:
-        stmt = stmt.where(RetentionPolicy.artifact_type == artifact_type)
-
-    stmt = stmt.order_by(RetentionPolicy.artifact_type)
-
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
-
-
-async def _enforce_policy(
-    session: AsyncSession,
-    policy: RetentionPolicy,
-    now: datetime,
-    dry_run: bool,
-    batch_size: int,
-) -> dict[str, Any]:
-    """Enforce a single retention policy.
-
-    Args:
-        session: Database session.
-        policy: The retention policy to enforce.
-        now: Current timestamp.
-        dry_run: If True, only report what would be done.
-        batch_size: Maximum artifacts to process.
-
-    Returns:
-        Dict with enforcement results for this policy.
-    """
-    # Calculate retention cutoff date
-    cutoff_date = now - timedelta(days=policy.minimum_retention_days)
-
-    result = {
-        "policy_id": str(policy.policy_id),
-        "artifact_type": policy.artifact_type,
-        "processed": 0,
-        "archived": 0,
-        "deleted": 0,
-        "actions": [],
-    }
-
-    # Find eligible artifacts based on artifact type
-    # This is a simplified implementation - real implementation would
-    # query the appropriate table based on artifact_type
-    eligible_artifacts = await _find_eligible_artifacts(
-        session=session,
-        artifact_type=policy.artifact_type,
-        cutoff_date=cutoff_date,
-        jurisdiction=policy.jurisdiction_profile,
-        limit=batch_size,
-    )
-
-    for artifact in eligible_artifacts:
-        try:
-            action_result = await _process_artifact(
-                session=session,
-                policy=policy,
-                artifact=artifact,
-                now=now,
-                dry_run=dry_run,
-            )
-
-            result["processed"] += 1
-            if action_result["action"] == "archive":
-                result["archived"] += 1
-            elif action_result["action"] == "delete":
-                result["deleted"] += 1
-
-            result["actions"].append(action_result)
-
-        except Exception as e:
-            logger.exception(
-                "Failed to process artifact for retention: type=%s, ref=%s, error=%s",
-                policy.artifact_type,
-                artifact.get("ref"),
-                e,
-            )
-
-    return result
-
-
-async def _find_eligible_artifacts(
-    _session: AsyncSession,
-    artifact_type: str,
-    cutoff_date: datetime,
-    _jurisdiction: str | None,
-    limit: int,
-) -> list[dict[str, Any]]:
-    """Find artifacts eligible for retention action.
-
-    This is a simplified implementation that returns mock data.
-    Real implementation would query the appropriate tables based on artifact_type.
-
-    Args:
-        _session: Database session (unused in stub).
-        artifact_type: Type of artifact to find.
-        cutoff_date: Date before which artifacts are eligible.
-        _jurisdiction: Optional jurisdiction filter (unused in stub).
-        limit: Maximum artifacts to return.
-
-    Returns:
-        List of artifact dicts with ref and metadata.
-    """
-    # This is a placeholder - actual implementation would query
-    # the appropriate table based on artifact_type
-    #
-    # For example:
-    # - "delivery": Query deliveries table for completed deliveries
-    # - "evidence_object": Query evidence_objects for sealed events
-    # - "audit_log": Query audit_log_records (for archival only)
-    #
-    # Each would need specific logic to determine if the artifact
-    # is past its retention period
-
-    logger.debug(
-        "Searching for %s artifacts older than %s (limit=%d)",
-        artifact_type,
-        cutoff_date.isoformat(),
-        limit,
-    )
-
-    # Return empty list - actual implementation would perform queries
-    # This ensures the handler works without database changes
-    return []
-
-
-async def _process_artifact(
-    session: AsyncSession,
-    policy: RetentionPolicy,
-    artifact: dict[str, Any],
-    now: datetime,
-    dry_run: bool,
-) -> dict[str, Any]:
-    """Process a single artifact for retention action.
-
-    Args:
-        session: Database session.
-        policy: The retention policy being enforced.
-        artifact: The artifact to process.
-        now: Current timestamp.
-        dry_run: If True, only report what would be done.
-
-    Returns:
-        Dict with action details.
-    """
-    artifact_ref = artifact.get("ref", "unknown")
-    action_type = policy.expiry_action
-
-    result = {
-        "artifact_type": policy.artifact_type,
-        "artifact_ref": artifact_ref,
-        "action": action_type.value,
-        "dry_run": dry_run,
-    }
-
-    if dry_run:
-        logger.info(
-            "DRY RUN: Would %s artifact: type=%s, ref=%s",
-            action_type.value,
-            policy.artifact_type,
-            artifact_ref,
-        )
-        return result
-
-    # Perform the actual action
-    if action_type == RetentionActionType.ARCHIVE:
-        archive_ref = await _archive_artifact(
-            session=session,
-            artifact_type=policy.artifact_type,
-            artifact=artifact,
-        )
-        result["archive_ref"] = archive_ref
-    elif action_type == RetentionActionType.DELETE:
-        await _delete_artifact(
-            session=session,
-            artifact_type=policy.artifact_type,
-            artifact=artifact,
-        )
-
-    # Record the action
-    action_record = RetentionAction(
-        artifact_type=policy.artifact_type,
-        artifact_ref=artifact_ref,
-        action_type=action_type,
-        policy_id=policy.policy_id,
-        executed_at=now,
-        executed_by="worker:retention",
-        result="success",
-        archive_ref=result.get("archive_ref"),
-        artifact_metadata=artifact.get("metadata"),
-        artifact_size_bytes=artifact.get("size_bytes"),
-        retention_deadline=artifact.get("retention_deadline"),
-    )
-    session.add(action_record)
-
-    logger.info(
-        "Retention action completed: type=%s, ref=%s, action=%s",
-        policy.artifact_type,
-        artifact_ref,
-        action_type.value,
-    )
-
-    return result
-
-
-async def _archive_artifact(
-    _session: AsyncSession,
-    artifact_type: str,
-    artifact: dict[str, Any],
-) -> str:
-    """Archive an artifact to long-term storage.
-
-    This is a placeholder - actual implementation would:
-    1. Copy the artifact to archive storage (e.g., S3 Glacier)
-    2. Create a reference to the archived copy
-    3. Optionally remove from primary storage
-
-    Args:
-        _session: Database session (unused in stub).
-        artifact_type: Type of artifact.
-        artifact: The artifact to archive.
-
-    Returns:
-        Reference to the archived artifact.
-    """
-    import uuid
-
-    # Placeholder: generate archive reference
-    archive_ref = f"archive://{artifact_type}/{uuid.uuid4()}"
-
-    logger.debug(
-        "Archived artifact: type=%s, ref=%s, archive_ref=%s",
-        artifact_type,
-        artifact.get("ref"),
-        archive_ref,
-    )
-
-    return archive_ref
-
-
-async def _delete_artifact(
-    _session: AsyncSession,
-    artifact_type: str,
-    artifact: dict[str, Any],
-) -> None:
-    """Delete an artifact permanently.
-
-    This is a placeholder - actual implementation would:
-    1. Verify the artifact is safe to delete
-    2. Remove from all storage locations
-    3. Clear any cached references
-
-    Args:
-        _session: Database session (unused in stub).
-        artifact_type: Type of artifact.
-        artifact: The artifact to delete.
-    """
-    logger.debug(
-        "Deleted artifact: type=%s, ref=%s",
-        artifact_type,
-        artifact.get("ref"),
-    )
