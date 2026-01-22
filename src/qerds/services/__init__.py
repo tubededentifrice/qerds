@@ -10,4 +10,19 @@ and business logic orchestration:
 - EvidenceService: Evidence event generation (REQ-B01, REQ-C01, REQ-H10)
 - EvidenceSealer: Evidence object sealing and timestamping (REQ-B02, REQ-C02, REQ-C03)
 - PDFGenerator: PDF proof generation using WeasyPrint
+- QualificationService: Qualification claim guardrails (REQ-A01, REQ-G01, REQ-G02)
 """
+
+from qerds.services.qualification import (
+    QualificationContext,
+    QualificationError,
+    QualificationService,
+    create_qualification_service,
+)
+
+__all__ = [
+    "QualificationContext",
+    "QualificationError",
+    "QualificationService",
+    "create_qualification_service",
+]
