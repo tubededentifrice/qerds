@@ -20,6 +20,9 @@ pydantic-settings==2.12.0
 # Cryptography (well-audited library for signatures, hashing, X.509)
 cryptography==46.0.3
 
+# XML parsing with XXE protection (for AS4 ETSI envelope parsing)
+defusedxml==0.7.1
+
 # PDF generation for evidence bundles
 weasyprint==68.0
 
