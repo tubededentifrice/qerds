@@ -7,4 +7,5 @@ and business logic orchestration:
 - JobQueueService: PostgreSQL-backed background job processing
 - AuthorizationService: RBAC/ABAC authorization (REQ-D02, REQ-H06)
 - DeliveryLifecycleService: Delivery state machine (REQ-C01, REQ-F04)
+- PDFGenerator: PDF proof generation using WeasyPrint
 """

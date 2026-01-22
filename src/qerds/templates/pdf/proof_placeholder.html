@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Preuve de depot - {{ delivery_id }}{% endblock %}
+
+{% block page_header %}Preuve de depot - {{ delivery_id }}{% endblock %}
+
+{% block content %}
+<h1 class="document-title">Preuve de depot</h1>
+<p class="document-subtitle">
+    Lettre recommandee electronique {% if is_qualified %}qualifiee{% else %}(mode developpement){% endif %}
+</p>
+
+<!-- Delivery Information -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Informations de l'envoi</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-value text-mono">{{ delivery_id }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Date de depot</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Statut</span>
+            <span class="info-value">
+                <span class="status-badge status-badge--{{ status_class|default('info') }}">
+                    {{ status|default('En attente') }}
+                </span>
+            </span>
+        </div>
+    </div>
+</section>
+
+<!-- Sender Information -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Expediteur</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Nom</span>
+            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+        </div>
+        {% if sender_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ sender_organization }}</span>
+        </div>
+        {% endif %}
+        {% if sender_email %}
+        <div class="info-row">
+            <span class="info-label">Email</span>
+            <span class="info-value">{{ sender_email }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Recipient Information -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Destinataire</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Nom</span>
+            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+        </div>
+        {% if recipient_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ recipient_organization }}</span>
+        </div>
+        {% endif %}
+        {% if recipient_email %}
+        <div class="info-row">
+            <span class="info-label">Email</span>
+            <span class="info-value">{{ recipient_email }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Content Information -->
+{% if content_info %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Contenu de l'envoi</h2>
+    <div class="info-grid">
+        {% if content_info.subject %}
+        <div class="info-row">
+            <span class="info-label">Objet</span>
+            <span class="info-value">{{ content_info.subject }}</span>
+        </div>
+        {% endif %}
+        {% if content_info.document_count %}
+        <div class="info-row">
+            <span class="info-label">Nombre de documents</span>
+            <span class="info-value">{{ content_info.document_count }}</span>
+        </div>
+        {% endif %}
+        {% if content_info.total_size %}
+        <div class="info-row">
+            <span class="info-label">Taille totale</span>
+            <span class="info-value">{{ content_info.total_size }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Seal Section -->
+<section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
+    <h3 class="seal-title">
+        {% if is_qualified %}
+        Sceau electronique qualifie
+        {% else %}
+        Sceau electronique (non qualifie - developpement)
+        {% endif %}
+    </h3>
+    <dl class="seal-details">
+        <dt>Algorithme de signature</dt>
+        <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
+
+        <dt>Horodatage</dt>
+        <dd>{{ seal_timestamp|format_datetime if seal_timestamp else generated_at|format_datetime }}</dd>
+
+        {% if content_hash %}
+        <dt>Empreinte du contenu (SHA-256)</dt>
+        <dd class="crypto-data">{{ content_hash }}</dd>
+        {% endif %}
+
+        {% if seal_id %}
+        <dt>Identifiant du sceau</dt>
+        <dd class="crypto-data">{{ seal_id }}</dd>
+        {% endif %}
+    </dl>
+</section>
+{% endblock %}
+
+{% block verification_info %}
+Pour verifier l'authenticite de ce document, utilisez le service de verification QERDS
+avec l'identifiant {{ delivery_id }}.
+{% endblock %}
