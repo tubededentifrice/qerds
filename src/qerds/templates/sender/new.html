@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Nouvel envoi{% endblock %}
+
+{% block main %}
+<div class="container container--narrow">
+    <header class="page-header">
+        <nav class="mb-4" aria-label="Fil d'Ariane">
+            <a href="/sender/dashboard" style="font-size: var(--text-sm); color: var(--text-secondary); text-decoration: none;">
+                ← Retour au tableau de bord
+            </a>
+        </nav>
+        <h1 class="page-title">Nouvel envoi</h1>
+        <p class="page-description">Envoyez une lettre recommandée électronique avec accusé de réception</p>
+    </header>
+
+    <form class="card card--elevated" action="/sender/deliveries" method="POST" enctype="multipart/form-data">
+        <div class="card-body">
+            <!-- Recipient Section -->
+            <fieldset style="border: none; padding: 0; margin: 0 0 var(--space-8) 0;">
+                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+                    Destinataire
+                </legend>
+
+                <div class="form-group">
+                    <label for="recipient_email" class="form-label form-label--required">Adresse e-mail du destinataire</label>
+                    <input type="email" id="recipient_email" name="recipient_email" class="form-input" placeholder="destinataire@exemple.fr" required>
+                    <p class="form-hint">Le destinataire recevra une notification à cette adresse</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="recipient_name" class="form-label">Nom du destinataire (optionnel)</label>
+                    <input type="text" id="recipient_name" name="recipient_name" class="form-input" placeholder="Jean Dupont">
+                    <p class="form-hint">Ce nom apparaîtra dans les preuves générées</p>
+                </div>
+            </fieldset>
+
+            <!-- Content Section -->
+            <fieldset style="border: none; padding: 0; margin: 0 0 var(--space-8) 0;">
+                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+                    Contenu
+                </legend>
+
+                <div class="form-group">
+                    <label for="subject" class="form-label form-label--required">Objet</label>
+                    <input type="text" id="subject" name="subject" class="form-input" placeholder="Objet de votre envoi" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="message" class="form-label">Message (optionnel)</label>
+                    <textarea id="message" name="message" class="form-textarea" placeholder="Ajoutez un message pour accompagner votre document..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label form-label--required">Document à envoyer</label>
+                    <div class="form-file">
+                        <input type="file" id="document" name="document" class="form-file-input" accept=".pdf,.doc,.docx,.odt" required>
+                        <label for="document" class="form-file-label">
+                            <svg class="form-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            </svg>
+                            <span class="form-file-text">
+                                <strong>Cliquez pour sélectionner</strong> ou glissez-déposez<br>
+                                PDF, DOC, DOCX ou ODT (max. 10 Mo)
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Options Section -->
+            <fieldset style="border: none; padding: 0; margin: 0;">
+                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+                    Options
+                </legend>
+
+                <div class="form-group">
+                    <label class="form-label">Type d'envoi</label>
+                    <div style="display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2);">
+                        <label style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface-alt); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent;" class="radio-option">
+                            <input type="radio" name="delivery_type" value="standard" checked style="margin-top: 0.25rem;">
+                            <div>
+                                <span style="font-weight: var(--font-medium);">Standard</span>
+                                <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-1);">
+                                    Le destinataire a 15 jours pour accepter ou refuser
+                                </p>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface-alt); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent;" class="radio-option">
+                            <input type="radio" name="delivery_type" value="urgent" style="margin-top: 0.25rem;">
+                            <div>
+                                <span style="font-weight: var(--font-medium);">Urgent</span>
+                                <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-1);">
+                                    Notification renforcée avec rappels automatiques
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+
+        <div class="card-footer" style="display: flex; gap: var(--space-3); justify-content: flex-end;">
+            <button type="button" class="btn btn--ghost" onclick="window.history.back()">Annuler</button>
+            <button type="submit" name="action" value="draft" class="btn btn--secondary">Enregistrer brouillon</button>
+            <button type="submit" name="action" value="send" class="btn btn--primary">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                Envoyer maintenant
+            </button>
+        </div>
+    </form>
+
+    <div class="alert alert--info mt-6">
+        <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+        </svg>
+        <div>
+            <strong>Bon à savoir</strong><br>
+            Une fois envoyée, vous recevrez une <strong>Preuve de Dépôt</strong> attestant de la date et de l'heure exactes de l'envoi. Cette preuve a valeur légale conformément au Code des Postes et Communications Électroniques.
+        </div>
+    </div>
+</div>
+{% endblock %}

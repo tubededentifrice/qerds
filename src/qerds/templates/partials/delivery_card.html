@@ -1,0 +1,45 @@
+{# Delivery card partial for sender dashboard #}
+{# Required: delivery object with id, recipient_email, subject, status, created_at, updated_at #}
+
+<article class="delivery-card" data-status="{{ delivery.status }}">
+    <div class="delivery-card-header">
+        <div class="delivery-meta">
+            <span class="delivery-id">#{{ delivery.id[:8] }}</span>
+            <time class="delivery-date" datetime="{{ delivery.created_at }}">{{ delivery.created_at_formatted }}</time>
+        </div>
+        {% set status = delivery.status %}
+        {% include 'partials/status_badge.html' %}
+    </div>
+
+    <div class="delivery-card-body">
+        <h3 class="delivery-subject">{{ delivery.subject or 'Sans objet' }}</h3>
+        <p class="delivery-recipient">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
+                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/>
+            </svg>
+            {{ delivery.recipient_email }}
+        </p>
+    </div>
+
+    <div class="delivery-card-footer">
+        <div class="delivery-actions">
+            {% if delivery.status == 'draft' %}
+            <a href="/sender/deliveries/{{ delivery.id }}/edit" class="btn btn--ghost btn--sm">Modifier</a>
+            <button type="button" class="btn btn--primary btn--sm" data-action="deposit">Déposer</button>
+            {% elif delivery.status in ['deposited', 'notified', 'available', 'accepted', 'received'] %}
+            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">Voir détails</a>
+            <a href="/sender/deliveries/{{ delivery.id }}/proof" class="btn btn--outline btn--sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/></svg>
+                Preuve
+            </a>
+            {% elif delivery.status in ['refused', 'expired'] %}
+            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">Voir détails</a>
+            <a href="/sender/deliveries/{{ delivery.id }}/proof" class="btn btn--outline btn--sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/></svg>
+                Preuve
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</article>
