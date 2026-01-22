@@ -2942,3 +2942,273 @@ a:hover {
         width: 100%;
     }
 }
+
+/* --------------------------------------------------------------------------
+   Pickup Portal Extended Styles
+   -------------------------------------------------------------------------- */
+
+/* Pickup card header content */
+.pickup-card-header-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.pickup-card-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+    margin: 0;
+}
+
+.pickup-card-reference {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.pickup-reference-code {
+    font-family: var(--font-mono);
+    background: rgba(0, 0, 0, 0.05);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+}
+
+/* Delivery info note */
+.delivery-info-note {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: var(--space-2);
+}
+
+/* Redacted info icon */
+.redacted-info-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+/* Pickup deadline styling */
+.pickup-deadline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.pickup-deadline-date {
+    font-size: var(--text-base);
+    color: var(--color-warning);
+    font-weight: var(--font-semibold);
+}
+
+/* Countdown component */
+.pickup-countdown {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    background: rgba(179, 64, 0, 0.1);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+}
+
+.pickup-countdown-loading {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.pickup-countdown-units {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.pickup-countdown-unit {
+    color: var(--color-warning);
+}
+
+.pickup-countdown-unit strong {
+    font-weight: var(--font-bold);
+    font-size: var(--text-lg);
+    margin-right: var(--space-1);
+}
+
+.pickup-countdown--urgent {
+    background: rgba(225, 0, 15, 0.1);
+}
+
+.pickup-countdown--urgent .pickup-countdown-unit {
+    color: var(--color-danger);
+}
+
+.pickup-countdown--expired {
+    background: rgba(225, 0, 15, 0.15);
+}
+
+.pickup-countdown-expired {
+    color: var(--color-danger);
+    font-weight: var(--font-semibold);
+}
+
+/* Pickup attachments list */
+.pickup-attachments-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.pickup-attachment-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.pickup-attachment-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+
+.pickup-attachment-icon--pdf {
+    color: var(--color-danger);
+}
+
+.pickup-attachment-icon--default {
+    color: var(--color-primary);
+}
+
+.pickup-attachment-name {
+    font-size: var(--text-base);
+    color: var(--text-primary);
+}
+
+.pickup-attachment-meta {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.pickup-attachments-summary {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-top: var(--space-2);
+}
+
+/* Pickup notice icon */
+.pickup-notice-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.pickup-notice-content {
+    flex: 1;
+}
+
+/* Pickup auth alert */
+.pickup-auth-alert {
+    margin-bottom: var(--space-4);
+}
+
+/* Pickup auth button */
+.pickup-auth-button {
+    gap: var(--space-3);
+}
+
+.pickup-auth-button .btn-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+/* Pickup action forms */
+.pickup-action-form {
+    display: contents;
+}
+
+.pickup-action-btn {
+    position: relative;
+}
+
+/* Button danger outline variant */
+.btn--danger-outline {
+    background: transparent;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+.btn--danger-outline:hover:not(:disabled) {
+    background: rgba(225, 0, 15, 0.08);
+    color: var(--color-danger);
+}
+
+/* Consent checkbox */
+.pickup-consent-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+    cursor: pointer;
+}
+
+.pickup-consent-checkbox input[type="checkbox"] {
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+}
+
+.pickup-consent-label {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: var(--leading-relaxed);
+}
+
+/* Pickup compliance note */
+.pickup-compliance-note {
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    max-width: 32rem;
+    margin: var(--space-8) auto;
+}
+
+/* Button loading spinner inside buttons */
+.btn .spinner {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: var(--space-2);
+}
+
+/* Mobile responsive pickup adjustments */
+@media (max-width: 640px) {
+    .pickup-hero {
+        padding: var(--space-8) var(--space-4);
+    }
+
+    .pickup-title {
+        font-size: var(--text-2xl);
+    }
+
+    .pickup-description {
+        font-size: var(--text-base);
+    }
+
+    .pickup-countdown-units {
+        flex-wrap: wrap;
+        gap: var(--space-2);
+    }
+
+    .pickup-countdown-unit strong {
+        font-size: var(--text-base);
+    }
+
+    .pickup-card {
+        margin: var(--space-4) auto;
+        border-radius: var(--radius-lg);
+    }
+
+    .pickup-card-header,
+    .pickup-card-body,
+    .pickup-card-footer {
+        padding: var(--space-4);
+    }
+}

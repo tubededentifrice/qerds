@@ -108,6 +108,10 @@ def _build_delivery_view_data(
             if delivery.acceptance_deadline_at
             else None
         ),
+        # ISO 8601 format for JavaScript countdown
+        "expires_at_iso": (
+            delivery.acceptance_deadline_at.isoformat() if delivery.acceptance_deadline_at else None
+        ),
         "accepted_at_formatted": (
             delivery.completed_at.strftime("%d/%m/%Y %H:%M")
             if delivery.completed_at and delivery.state == DeliveryState.ACCEPTED
@@ -120,7 +124,27 @@ def _build_delivery_view_data(
         ),
         "state": delivery.state.value,
         "content_size": None,  # Would come from content objects
+        "content_objects": [],  # Will be populated if available
     }
+
+    # Build content objects list if available
+    if hasattr(delivery, "content_objects") and delivery.content_objects:
+        total_size = 0
+        for content in delivery.content_objects:
+            size_bytes = getattr(content, "size_bytes", 0) or 0
+            total_size += size_bytes
+            content_type = getattr(content, "content_type", "application/octet-stream")
+            mime_class = "pdf" if content_type == "application/pdf" else "default"
+            data["content_objects"].append(
+                {
+                    "display_name": getattr(content, "filename", None) or "Document",
+                    "mime_type": content_type,
+                    "mime_type_class": mime_class,
+                    "size_bytes": size_bytes,
+                    "size_formatted": _format_file_size(size_bytes),
+                }
+            )
+        data["total_size_formatted"] = _format_file_size(total_size)
 
     # Sender info is only revealed after accept/refuse (REQ-F03)
     if sender_revealed and delivery.sender_party:
@@ -131,6 +155,22 @@ def _build_delivery_view_data(
         data["sender_email"] = None
 
     return data
+
+
+def _format_file_size(size_bytes: int) -> str:
+    """Format file size in human-readable format.
+
+    Args:
+        size_bytes: Size in bytes.
+
+    Returns:
+        Formatted size string (e.g., "1.2 Mo").
+    """
+    if size_bytes < 1024:
+        return f"{size_bytes} o"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} Ko"
+    return f"{size_bytes / (1024 * 1024):.2f} Mo"
 
 
 # ---------------------------------------------------------------------------
