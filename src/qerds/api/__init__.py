@@ -23,7 +23,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from qerds.api.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
-from qerds.api.routers import admin_router, recipient_router, sender_router, verify_router
+from qerds.api.routers import (
+    admin_router,
+    auth_router,
+    recipient_router,
+    sender_router,
+    verify_router,
+)
 from qerds.api.routers.pages import router as pages_router
 from qerds.api.templates import get_templates
 
@@ -191,6 +197,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(pages_router)
 
     # API namespace routers
+    app.include_router(auth_router)
     app.include_router(sender_router)
     app.include_router(recipient_router)
     app.include_router(verify_router)
