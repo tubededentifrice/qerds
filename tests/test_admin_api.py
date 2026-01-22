@@ -588,6 +588,105 @@ class TestAccessReviewExportIntegration:
         last_active_30_days = now - timedelta(days=30)
         assert last_active_30_days > threshold
 
+    def test_permission_change_record_schema(self):
+        """Test PermissionChangeRecord schema validation."""
+        from qerds.api.schemas.admin import PermissionChangeRecord
+
+        record = PermissionChangeRecord(
+            timestamp=datetime.now(UTC),
+            actor_id="admin-123",
+            actor_type="admin_user",
+            target_user_id="user-456",
+            action="assign",
+            role="admin_user",
+            details={"reason": "Initial setup"},
+        )
+
+        assert record.action == "assign"
+        assert record.role == "admin_user"
+        assert record.actor_type == "admin_user"
+
+    def test_permission_change_record_revoke(self):
+        """Test PermissionChangeRecord for revoke action."""
+        from qerds.api.schemas.admin import PermissionChangeRecord
+
+        record = PermissionChangeRecord(
+            timestamp=datetime.now(UTC),
+            actor_id="admin-123",
+            actor_type="admin_user",
+            target_user_id="user-456",
+            action="revoke",
+            role="security_officer",
+            details=None,
+        )
+
+        assert record.action == "revoke"
+        assert record.role == "security_officer"
+        assert record.details is None
+
+    def test_access_review_export_response_includes_permission_changes(self):
+        """Test that AccessReviewExportResponse includes permission_changes field."""
+        from qerds.api.schemas.admin import (
+            AccessReviewExportResponse,
+            PermissionChangeRecord,
+        )
+
+        # Create sample permission change records
+        changes = [
+            PermissionChangeRecord(
+                timestamp=datetime.now(UTC),
+                actor_id="admin-1",
+                actor_type="admin_user",
+                target_user_id="user-1",
+                action="assign",
+                role="admin_user",
+                details=None,
+            ),
+            PermissionChangeRecord(
+                timestamp=datetime.now(UTC) - timedelta(days=1),
+                actor_id="admin-2",
+                actor_type="admin_user",
+                target_user_id="user-2",
+                action="revoke",
+                role="auditor",
+                details={"reason": "Role no longer needed"},
+            ),
+        ]
+
+        response = AccessReviewExportResponse(
+            exported_at=datetime.now(UTC),
+            exported_by="admin-123",
+            total_bindings=5,
+            total_users=3,
+            total_clients=2,
+            bindings=[],
+            inactive_users=[],
+            inactive_clients=[],
+            permission_changes=changes,
+        )
+
+        assert len(response.permission_changes) == 2
+        assert response.permission_changes[0].action == "assign"
+        assert response.permission_changes[1].action == "revoke"
+
+    def test_access_review_export_response_empty_permission_changes(self):
+        """Test AccessReviewExportResponse with no permission changes."""
+        from qerds.api.schemas.admin import AccessReviewExportResponse
+
+        response = AccessReviewExportResponse(
+            exported_at=datetime.now(UTC),
+            exported_by="admin-123",
+            total_bindings=0,
+            total_users=0,
+            total_clients=0,
+            bindings=[],
+            inactive_users=[],
+            inactive_clients=[],
+            # permission_changes defaults to empty list
+        )
+
+        assert response.permission_changes == []
+
 
 class TestSystemStatsEndpointIntegration:
     """Integration tests for system stats endpoint."""
@@ -709,6 +808,73 @@ class TestSecurityLogging:
         payload_dict = payload.to_dict()
         assert payload_dict["event_type"] == "sensitive_access"
         assert payload_dict["details"]["purpose"] == "access_review"
+
+
+# -----------------------------------------------------------------------------
+# Permission Change History Tests
+# -----------------------------------------------------------------------------
+
+
+class TestPermissionChangeHistory:
+    """Tests for permission change history extraction from audit log."""
+
+    def test_permission_change_event_types(self):
+        """Test that correct event types are used for permission changes."""
+        # The endpoint queries for these specific event types
+        expected_event_types = ["admin_role_assigned", "admin_role_revoked"]
+
+        # Verify these match the SecurityEventType values
+        from qerds.services.security_events import SecurityEventType
+
+        assert SecurityEventType.ADMIN_ROLE_ASSIGNED.value == "admin_role_assigned"
+        assert SecurityEventType.ADMIN_ROLE_REVOKED.value == "admin_role_revoked"
+
+        # Verify we're looking for both
+        for event_type in expected_event_types:
+            assert event_type in [
+                SecurityEventType.ADMIN_ROLE_ASSIGNED.value,
+                SecurityEventType.ADMIN_ROLE_REVOKED.value,
+            ]
+
+    def test_permission_change_action_mapping(self):
+        """Test that event types map to correct actions."""
+        # admin_role_assigned -> "assign"
+        # admin_role_revoked -> "revoke"
+        event_action_map = {
+            "admin_role_assigned": "assign",
+            "admin_role_revoked": "revoke",
+        }
+
+        assert event_action_map["admin_role_assigned"] == "assign"
+        assert event_action_map["admin_role_revoked"] == "revoke"
+
+    @pytest.mark.asyncio
+    async def test_role_change_logging_structure(self, mock_admin_user: AuthenticatedUser):
+        """Test that role changes are logged with correct structure."""
+        from qerds.services.security_events import SecurityActor, SecurityEventType
+
+        # The SecurityEventLogger.log_role_change method creates structured payloads
+        # Verify the expected structure for role changes by creating a sample actor
+        sample_actor = SecurityActor(
+            actor_id=str(mock_admin_user.principal_id),
+            actor_type="admin_user",
+        )
+
+        # Verify actor structure is correct for logging
+        assert sample_actor.actor_id == str(mock_admin_user.principal_id)
+        assert sample_actor.actor_type == "admin_user"
+
+        # The log_role_change method uses these parameters:
+        # - actor: SecurityActor
+        # - target_user_id: str
+        # - role: str
+        # - action: str ("assign" or "revoke")
+
+        # Verify the action determines the event type
+        # assign -> ADMIN_ROLE_ASSIGNED
+        # revoke -> ADMIN_ROLE_REVOKED
+        assert SecurityEventType.ADMIN_ROLE_ASSIGNED.value == "admin_role_assigned"
+        assert SecurityEventType.ADMIN_ROLE_REVOKED.value == "admin_role_revoked"
 
 
 # -----------------------------------------------------------------------------

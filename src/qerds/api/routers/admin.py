@@ -43,6 +43,7 @@ from qerds.api.schemas.admin import (
     IncidentResponse,
     IncidentTimelineEvent,
     PartyInfoResponse,
+    PermissionChangeRecord,
     RoleBindingExport,
     StorageStats,
     SystemStatsResponse,
@@ -636,6 +637,74 @@ async def create_config_snapshot(
 # -----------------------------------------------------------------------------
 
 
+async def _get_permission_change_history(
+    db: AsyncSession,
+    limit: int = 1000,
+) -> list[PermissionChangeRecord]:
+    """Fetch permission change history from the security audit log.
+
+    Retrieves records of role assignments and revocations from the
+    tamper-evident audit log for compliance review.
+
+    Args:
+        db: Database session.
+        limit: Maximum number of records to return.
+
+    Returns:
+        List of permission change records, ordered by timestamp descending.
+    """
+    from qerds.db.models.audit import AuditLogRecord
+    from qerds.db.models.base import AuditStream
+
+    # Query audit log for role change events
+    # Event types: admin_role_assigned, admin_role_revoked
+    role_change_events = ["admin_role_assigned", "admin_role_revoked"]
+
+    query = (
+        select(AuditLogRecord)
+        .where(AuditLogRecord.stream == AuditStream.SECURITY)
+        .where(AuditLogRecord.event_type.in_(role_change_events))
+        .order_by(AuditLogRecord.created_at.desc())
+        .limit(limit)
+    )
+
+    result = await db.execute(query)
+    records = result.scalars().all()
+
+    permission_changes: list[PermissionChangeRecord] = []
+
+    for record in records:
+        # Extract details from the summary field which contains structured data
+        summary = record.summary or {}
+
+        # Determine action from event type
+        action = "assign" if record.event_type == "admin_role_assigned" else "revoke"
+
+        # The summary typically contains the action and resource info
+        # The payload_ref contains full details but is stored externally
+        # For now, we use what's available in summary and resource fields
+        role_name = summary.get("resource", "").split("/")[-1] if summary.get("resource") else ""
+
+        # Parse role from action string if available (format: "role assign: <role_name>")
+        action_str = summary.get("action", "")
+        if ":" in action_str:
+            role_name = action_str.split(":")[-1].strip()
+
+        permission_changes.append(
+            PermissionChangeRecord(
+                timestamp=record.created_at,
+                actor_id=record.actor_id or "unknown",
+                actor_type=record.actor_type or "unknown",
+                target_user_id=record.resource_id or "unknown",
+                action=action,
+                role=role_name or "unknown",
+                details=summary,
+            )
+        )
+
+    return permission_changes
+
+
 @router.get(
     "/access-reviews/export",
     response_model=AccessReviewExportResponse,
@@ -746,6 +815,10 @@ async def export_access_reviews(
             if is_inactive and binding.api_client_id not in inactive_clients:
                 inactive_clients.append(binding.api_client_id)
 
+    # Fetch permission change history from audit log
+    # Role changes are logged as admin_role_assigned or admin_role_revoked events
+    permission_changes = await _get_permission_change_history(db)
+
     await db.commit()
 
     return AccessReviewExportResponse(
@@ -757,6 +830,7 @@ async def export_access_reviews(
         bindings=binding_exports,
         inactive_users=inactive_users,
         inactive_clients=inactive_clients,
+        permission_changes=permission_changes,
     )
 
 
