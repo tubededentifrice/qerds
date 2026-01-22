@@ -46,7 +46,12 @@
     "submit": "Submit",
     "cancel": "Cancel",
     "save_draft": "Save draft",
-    "send_now": "Send now"
+    "send_now": "Send now",
+    "saving_draft": "Saving draft...",
+    "sending": "Sending...",
+    "file_type_error": "File type not allowed. Accepted formats: PDF, DOC, DOCX, ODT",
+    "file_size_error": "File too large. Maximum size: 10 MB",
+    "remove_file": "Remove file"
   },
   "delivery": {
     "new_delivery": "New delivery",
