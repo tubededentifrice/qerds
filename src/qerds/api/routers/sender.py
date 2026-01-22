@@ -298,7 +298,7 @@ async def get_delivery(
     response_model=ContentUploadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload content object",
-    description="Uploads a content object to a draft delivery with integrity binding (SHA-256).",
+    description="Uploads content with integrity binding and encryption at rest (REQ-E01).",
 )
 async def upload_content(
     delivery_id: UUID,
@@ -312,9 +312,10 @@ async def upload_content(
 ) -> ContentUploadResponse:
     """Upload a content object to a delivery.
 
-    The content integrity is verified by comparing the provided SHA-256 hash
-    with the computed hash of the uploaded content. This ensures content
-    integrity binding per REQ-B02.
+    The content is:
+    1. Verified against the provided SHA-256 hash (integrity binding per REQ-B02)
+    2. Encrypted with AES-256-GCM before storage (confidentiality per REQ-E01)
+    3. Stored in the object store with encryption metadata
 
     Args:
         delivery_id: UUID of the delivery.
@@ -368,30 +369,65 @@ async def upload_content(
             detail="Content hash mismatch: provided SHA-256 does not match uploaded content",
         )
 
-    # Upload to object store
-    storage_key = f"deliveries/{delivery_id}/content/{computed_hash}"
+    # Generate content object ID early so we can use it for encryption AAD
+    import uuid as uuid_module
+
+    content_object_id = uuid_module.uuid4()
+
+    # Encrypt content before storage (REQ-E01)
+    from qerds.db.models.base import EncryptionScheme
+    from qerds.services.content_encryption import get_content_encryption_service
+
+    try:
+        encryption_service = await get_content_encryption_service()
+        ciphertext, encryption_metadata = await encryption_service.encrypt_for_storage(
+            content=content,
+            delivery_id=delivery_id,
+            content_object_id=content_object_id,
+        )
+        encryption_scheme = EncryptionScheme.AES_256_GCM
+    except Exception as e:
+        logger.error(
+            "Content encryption failed",
+            extra={
+                "delivery_id": str(delivery_id),
+                "error": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to encrypt content for storage",
+        ) from e
+
+    # Upload encrypted content to object store
+    storage_key = f"deliveries/{delivery_id}/content/{computed_hash}.enc"
 
     from qerds.services.storage import Buckets
 
     storage.upload(
         bucket=Buckets.CONTENT,
         key=storage_key,
-        data=content,
-        content_type=mime_type,
+        data=ciphertext,
+        content_type="application/octet-stream",  # Encrypted content is binary
         metadata={
             "delivery_id": str(delivery_id),
             "original_filename": original_filename,
+            "original_mime_type": mime_type,
+            "encrypted": "true",
         },
     )
 
-    # Create content object record
+    # Create content object record with encryption metadata
     content_object = ContentObject(
+        content_object_id=content_object_id,
         delivery_id=delivery_id,
         sha256=computed_hash,
-        size_bytes=len(content),
+        size_bytes=len(content),  # Original size, not encrypted size
         mime_type=mime_type,
         original_filename=original_filename,
         storage_key=storage_key,
+        encryption_scheme=encryption_scheme,
+        encryption_metadata=encryption_metadata,
     )
 
     db.add(content_object)
@@ -399,11 +435,12 @@ async def upload_content(
     await db.refresh(content_object)
 
     logger.info(
-        "Content uploaded",
+        "Content uploaded (encrypted)",
         extra={
             "delivery_id": str(delivery_id),
             "content_object_id": str(content_object.content_object_id),
             "size_bytes": len(content),
+            "encrypted_size_bytes": len(ciphertext),
             "sha256": computed_hash[:16] + "...",
         },
     )
@@ -761,6 +798,141 @@ async def download_proof(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate proof PDF",
         ) from e
+
+
+# -----------------------------------------------------------------------------
+# Content Download for Sender
+# -----------------------------------------------------------------------------
+
+
+@router.get(
+    "/deliveries/{delivery_id}/content/{content_object_id}",
+    summary="Download content object (sender)",
+    description="""
+    Download a content object attached to a delivery.
+
+    **Authorization**: Only the sender can download their own content.
+
+    **Encryption (REQ-E01)**: Content is stored encrypted at rest. This endpoint
+    decrypts the content for the authorized sender.
+
+    Returns the decrypted content with appropriate Content-Type and
+    Content-Disposition headers.
+    """,
+    responses={
+        200: {
+            "content": {"application/octet-stream": {}},
+            "description": "Content file (decrypted)",
+        },
+        404: {"description": "Delivery or content not found"},
+    },
+)
+async def download_sender_content(
+    delivery_id: UUID,
+    content_object_id: UUID,
+    user: SenderUser,
+    db: DbSession,
+    storage: StorageClient,
+) -> Response:
+    """Download content for the sender (own content).
+
+    Senders can always download their own content regardless of delivery state.
+
+    Args:
+        delivery_id: UUID of the delivery.
+        content_object_id: UUID of the content object to download.
+        user: Authenticated sender user.
+        db: Database session.
+        storage: Object store client.
+
+    Returns:
+        Decrypted content file response.
+
+    Raises:
+        HTTPException: If delivery or content not found.
+    """
+    # Verify sender owns this delivery and load content
+    delivery = await _get_sender_delivery(db, delivery_id, user, load_content=True)
+
+    # Find the requested content object
+    content_object = None
+    for co in delivery.content_objects:
+        if co.content_object_id == content_object_id:
+            content_object = co
+            break
+
+    if not content_object:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Content object {content_object_id} not found in delivery {delivery_id}",
+        )
+
+    # Download encrypted content from object store
+    from qerds.services.storage import Buckets
+
+    try:
+        encrypted_bytes = storage.download(
+            bucket=Buckets.CONTENT,
+            key=content_object.storage_key,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to download content from object store",
+            extra={
+                "delivery_id": str(delivery_id),
+                "content_object_id": str(content_object_id),
+                "storage_key": content_object.storage_key,
+                "error": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve content from storage",
+        ) from e
+
+    # Decrypt content if encryption metadata is present (REQ-E01)
+    plaintext = encrypted_bytes
+    if content_object.encryption_metadata:
+        from qerds.services.content_encryption import get_content_encryption_service
+
+        try:
+            encryption_service = await get_content_encryption_service()
+            plaintext = await encryption_service.decrypt_content_object(
+                ciphertext=encrypted_bytes,
+                encryption_metadata=content_object.encryption_metadata,
+                delivery_id=delivery_id,
+                content_object_id=content_object_id,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to decrypt content",
+                extra={
+                    "delivery_id": str(delivery_id),
+                    "content_object_id": str(content_object_id),
+                    "error": str(e),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to decrypt content",
+            ) from e
+
+    logger.info(
+        "Sender downloaded content",
+        extra={
+            "delivery_id": str(delivery_id),
+            "content_object_id": str(content_object_id),
+            "sender_id": str(user.principal_id),
+        },
+    )
+
+    # Return decrypted content with original filename
+    filename = content_object.original_filename or f"content_{content_object_id}"
+    return Response(
+        content=plaintext,
+        media_type=content_object.mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # -----------------------------------------------------------------------------

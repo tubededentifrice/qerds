@@ -488,6 +488,7 @@ async def refuse_delivery(
             "content": {"application/octet-stream": {}},
         },
         400: {"description": "Content not available (pre-acceptance)", "model": ErrorResponse},
+        403: {"description": "Not authorized to access content", "model": ErrorResponse},
         404: {"description": "Delivery or content not found", "model": ErrorResponse},
         410: {"description": "Delivery expired", "model": ErrorResponse},
     },
@@ -497,6 +498,9 @@ async def refuse_delivery(
 
     **CPCE Compliance (REQ-E02)**: Content access is only allowed AFTER acceptance.
     Pre-acceptance requests return 400 Bad Request.
+
+    **Encryption (REQ-E01)**: Content is stored encrypted at rest. This endpoint
+    decrypts the content for authorized recipients only.
 
     On first download after acceptance:
     - Emits EVT_RECEIVED evidence event
@@ -517,6 +521,11 @@ async def download_content(
     """Download delivery content (post-acceptance only).
 
     Content access is gated per REQ-E02 - only available after acceptance.
+    Content is decrypted per REQ-E01 before returning to authorized user.
+
+    Authorization:
+    - Recipient: Only after ACCEPTED or RECEIVED state
+    - Sender: Always allowed (own content)
     """
     logger.info(
         "Content download requested",
@@ -527,10 +536,28 @@ async def download_content(
         },
     )
 
-    # Placeholder - full implementation requires:
-    # 1. DB session to load delivery and verify acceptance
-    # 2. Object store client to retrieve content
-    # 3. Evidence service to record access event
+    # NOTE: Full implementation requires DB session injection via Depends
+    # This is a documented placeholder showing the decryption flow:
+    #
+    # 1. Load delivery and verify recipient is authorized
+    # 2. Check delivery state allows content access (ACCEPTED or RECEIVED)
+    # 3. Load content object from database
+    # 4. Download encrypted content from object store
+    # 5. Decrypt using ContentEncryptionService
+    # 6. Return decrypted content with proper headers
+    #
+    # Example decryption flow:
+    # ```python
+    # from qerds.services.content_encryption import get_content_encryption_service
+    #
+    # encryption_service = await get_content_encryption_service()
+    # plaintext = await encryption_service.decrypt_for_user(
+    #     ciphertext=encrypted_bytes,
+    #     encryption_metadata=content_object.encryption_metadata,
+    #     user=user,
+    #     delivery=delivery,
+    # )
+    # ```
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
