@@ -67,3 +67,6 @@ storage/
 # Databases (should not be used in prod here, but keep local artifacts out of git)
 *.sqlite
 *.sqlite3
+
+# bv (beads viewer) local config and caches
+.bv/
