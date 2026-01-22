@@ -387,6 +387,8 @@ class TestTemplateStructure:
         """Verify recipient templates exist."""
         assert (TEMPLATES_DIR / "recipient" / "pickup.html").exists()
         assert (TEMPLATES_DIR / "recipient" / "accepted.html").exists()
+        assert (TEMPLATES_DIR / "recipient" / "refused.html").exists()
+        assert (TEMPLATES_DIR / "recipient" / "inbox.html").exists()
 
     def test_admin_templates_exist(self) -> None:
         """Verify admin templates exist."""

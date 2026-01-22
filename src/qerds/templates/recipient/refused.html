@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('refused.title') }}{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block main %}
+<div class="pickup-hero" style="background: linear-gradient(180deg, #ffe9e6 0%, var(--bg-body) 100%);">
+    <div class="pickup-hero-icon" style="background: rgba(225, 0, 15, 0.15); color: var(--color-danger);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+    </div>
+    <h1 class="pickup-title" style="color: var(--color-danger);">{{ _('refused.title') }}</h1>
+    <p class="pickup-description">
+        {{ _('refused.refused_message') }}
+    </p>
+</div>
+
+<div class="container">
+    <article class="pickup-card">
+        <header class="pickup-card-header" style="background: linear-gradient(135deg, #ffe9e6 0%, #fecaca 100%);">
+            <div style="display: flex; align-items: center; gap: var(--space-3);">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1.5rem; height: 1.5rem; color: var(--color-danger);">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/>
+                </svg>
+                <div>
+                    <h2 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--color-danger);">
+                        {{ _('refused.refusal_recorded') }}
+                    </h2>
+                    <p style="font-size: var(--text-sm); color: #991b1b;">
+                        {{ _('refused.refused_on') }} {{ delivery.refused_at_formatted }}
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <div class="pickup-card-body">
+            <div class="delivery-info-list">
+                <!-- Sender identity is NOW revealed after refusal per CPCE -->
+                <div class="delivery-info-item">
+                    <span class="delivery-info-label">{{ _('delivery.sender') }}</span>
+                    <span class="delivery-info-value" style="font-weight: var(--font-semibold);">{{ delivery.sender_name }}</span>
+                    <span style="font-size: var(--text-sm); color: var(--text-secondary);">{{ delivery.sender_email }}</span>
+                </div>
+
+                <div class="delivery-info-item">
+                    <span class="delivery-info-label">{{ _('delivery.subject') }}</span>
+                    <span class="delivery-info-value">{{ delivery.subject or _('delivery.subject_not_specified') }}</span>
+                </div>
+
+                <div class="delivery-info-item">
+                    <span class="delivery-info-label">{{ _('delivery.deposit_date') }}</span>
+                    <span class="delivery-info-value">{{ delivery.deposited_at_formatted }}</span>
+                </div>
+
+                <div class="delivery-info-item">
+                    <span class="delivery-info-label">{{ _('refused.refused_on') }}</span>
+                    <span class="delivery-info-value">{{ delivery.refused_at_formatted }}</span>
+                </div>
+
+                <div class="delivery-info-item">
+                    <span class="delivery-info-label">{{ _('delivery.reference') }}</span>
+                    <code style="font-family: var(--font-mono); font-size: var(--text-sm);">{{ delivery.id }}</code>
+                </div>
+            </div>
+
+            <!-- Refusal notice -->
+            <div class="pickup-notice" style="background: #ffe9e6; color: var(--color-danger); margin-top: var(--space-6);">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                </svg>
+                <div>
+                    <strong>{{ _('refused.content_not_accessible') }}</strong><br>
+                    {{ _('refused.content_not_accessible_note') }}
+                </div>
+            </div>
+        </div>
+
+        <footer class="pickup-card-footer">
+            <h3 style="font-size: var(--text-sm); font-weight: var(--font-semibold); margin-bottom: var(--space-3);">
+                {{ _('refused.available_proofs') }}
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                <a href="/recipient/deliveries/{{ delivery.id }}/proofs/refusal" class="btn btn--outline btn--block" style="justify-content: flex-start; gap: var(--space-3); border-color: var(--color-danger); color: var(--color-danger);">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem;">
+                        <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/>
+                    </svg>
+                    <span>
+                        <strong>{{ _('refused.refusal_proof') }}</strong>
+                        <small style="display: block; color: var(--text-secondary);">{{ _('refused.official_refusal_proof') }}</small>
+                    </span>
+                </a>
+                <a href="/verify?id={{ delivery.proof_id }}" class="btn btn--ghost btn--block" style="justify-content: flex-start; gap: var(--space-3);">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem;">
+                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                    </svg>
+                    <span>
+                        <strong>{{ _('accepted.verify_authenticity') }}</strong>
+                        <small style="display: block; color: var(--text-secondary);">{{ _('accepted.cryptographic_validation') }}</small>
+                    </span>
+                </a>
+            </div>
+        </footer>
+    </article>
+
+    <div class="alert alert--info mt-6" style="max-width: 32rem; margin-inline: auto;">
+        <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+        </svg>
+        <div>
+            <strong>{{ _('accepted.proof_conservation') }}</strong><br>
+            {{ _('accepted.proof_conservation_note') }}
+        </div>
+    </div>
+
+    <p class="text-center" style="font-size: var(--text-sm); color: var(--text-tertiary); max-width: 32rem; margin: var(--space-8) auto;">
+        <a href="/recipient/inbox">{{ _('accepted.view_other_mail') }}</a> |
+        <a href="/help">{{ _('accepted.help') }}</a>
+    </p>
+</div>
+{% endblock %}
