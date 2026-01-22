@@ -36,8 +36,8 @@ Legend: ✅ implemented, ❌ not implemented.
 | REQ-D07 | Network filtering/firewalls default deny | ❌ |  |
 | REQ-D08 | Security logging/monitoring protected and audit-ready | ❌ |  |
 | REQ-D09 | Business continuity, backup, and disaster recovery controls | ❌ |  |
-| REQ-E01 | Confidentiality against unauthorised access (including operators) | ❌ |  |
-| REQ-E02 | Recipient identification/authorisation gates content access | ❌ |  |
+| REQ-E01 | Confidentiality against unauthorised access (including operators) | ✅ | `src/qerds/services/encryption.py`, `content_encryption.py` - AES-256-GCM envelope encryption, tests in `tests/test_encryption.py`, `test_content_encryption.py` |
+| REQ-E02 | Recipient identification/authorisation gates content access | ✅ | `src/qerds/services/content_encryption.py:decrypt_for_user()` - authorization checks for sender/recipient, tests in `tests/test_content_encryption.py` |
 | REQ-E03 | Notifications/endpoints minimise personal data exposure | ❌ |  |
 | REQ-F01 | CPCE: recipient info + permanent access to proofs; third-party verification by ID | ❌ |  |
 | REQ-F02 | CPCE: notification includes required info and respects pre-acceptance constraints | ❌ |  |
