@@ -6,6 +6,7 @@ This package contains all database models organized by domain:
 - deliveries: Delivery state machine and content objects
 - evidence: Evidence events, objects, and policy snapshots
 - auth: Admin users, API clients, roles, and bindings
+- session: User session management
 - audit: Audit log records and audit packs
 - retention: Retention policies and actions
 - jobs: PostgreSQL-backed job queue
@@ -19,6 +20,7 @@ from qerds.db.models.evidence import EvidenceEvent, EvidenceObject, PolicySnapsh
 from qerds.db.models.jobs import Job
 from qerds.db.models.parties import Party, RecipientConsent, SenderProofing
 from qerds.db.models.retention import RetentionAction, RetentionPolicy
+from qerds.db.models.session import Session
 
 __all__ = [
     "AdminUser",
@@ -39,5 +41,6 @@ __all__ = [
     "Role",
     "RoleBinding",
     "SenderProofing",
+    "Session",
     "metadata",
 ]
