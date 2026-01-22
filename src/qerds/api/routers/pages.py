@@ -144,6 +144,93 @@ def _mock_delivery_accepted(delivery_id: str) -> dict[str, Any]:
     }
 
 
+def _mock_delivery_refused(delivery_id: str) -> dict[str, Any]:
+    """Generate mock delivery data for post-refusal view."""
+    now = datetime.now()
+    return {
+        "id": delivery_id,
+        "subject": "Document important",
+        "sender_name": "Entreprise ABC",
+        "sender_email": "contact@entreprise-abc.fr",
+        "deposited_at": (now - timedelta(days=5)).isoformat(),
+        "deposited_at_formatted": (now - timedelta(days=5)).strftime("%d %B %Y a %H:%M"),
+        "refused_at": now.isoformat(),
+        "refused_at_formatted": now.strftime("%d %B %Y a %H:%M"),
+        "proof_id": f"PRF-{delivery_id[:8].upper()}",
+    }
+
+
+def _mock_inbox_deliveries(
+    filter_status: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Generate mock inbox deliveries for recipient.
+
+    Returns:
+        Tuple of (deliveries list, total count).
+    """
+    now = datetime.now()
+    all_deliveries = [
+        {
+            "id": "d1a2b3c4-e5f6-7890-abcd-ef1234567890",
+            "subject": "Mise en demeure - Facture impayee",
+            "status": "available",
+            "sender_name": None,  # Hidden pre-acceptance
+            "created_at": (now - timedelta(days=2)).isoformat(),
+            "created_at_formatted": (now - timedelta(days=2)).strftime("%d/%m/%Y"),
+            "expires_at": (now + timedelta(days=13)).isoformat(),
+            "expires_at_formatted": (now + timedelta(days=13)).strftime("%d/%m/%Y"),
+        },
+        {
+            "id": "d2b3c4d5-f6a7-8901-bcde-f23456789012",
+            "subject": "Convocation assemblee generale",
+            "status": "notified",
+            "sender_name": None,  # Hidden pre-acceptance
+            "created_at": (now - timedelta(days=5)).isoformat(),
+            "created_at_formatted": (now - timedelta(days=5)).strftime("%d/%m/%Y"),
+            "expires_at": (now + timedelta(days=10)).isoformat(),
+            "expires_at_formatted": (now + timedelta(days=10)).strftime("%d/%m/%Y"),
+        },
+        {
+            "id": "d3c4d5e6-a7b8-9012-cdef-345678901234",
+            "subject": "Resiliation de contrat",
+            "status": "accepted",
+            "sender_name": "Entreprise ABC",
+            "created_at": (now - timedelta(days=10)).isoformat(),
+            "created_at_formatted": (now - timedelta(days=10)).strftime("%d/%m/%Y"),
+            "expires_at_formatted": None,
+        },
+        {
+            "id": "d4d5e6f7-b8c9-0123-defa-456789012345",
+            "subject": None,
+            "status": "refused",
+            "sender_name": "Cabinet Juridique Martin",
+            "created_at": (now - timedelta(days=15)).isoformat(),
+            "created_at_formatted": (now - timedelta(days=15)).strftime("%d/%m/%Y"),
+            "expires_at_formatted": None,
+        },
+        {
+            "id": "d5e6f7a8-c9d0-1234-efab-567890123456",
+            "subject": "Rappel de paiement",
+            "status": "expired",
+            "sender_name": "Service Contentieux",
+            "created_at": (now - timedelta(days=30)).isoformat(),
+            "created_at_formatted": (now - timedelta(days=30)).strftime("%d/%m/%Y"),
+            "expires_at_formatted": None,
+        },
+    ]
+
+    # Apply filter if specified
+    if filter_status and filter_status != "all":
+        if filter_status == "pending":
+            deliveries = [d for d in all_deliveries if d["status"] in ("available", "notified")]
+        else:
+            deliveries = [d for d in all_deliveries if d["status"] == filter_status]
+    else:
+        deliveries = all_deliveries
+
+    return deliveries, len(deliveries)
+
+
 def _mock_admin_stats() -> dict[str, Any]:
     """Generate mock admin statistics."""
     return {
@@ -312,6 +399,55 @@ async def recipient_accepted(request: Request, delivery_id: str) -> HTMLResponse
         delivery=_mock_delivery_accepted(delivery_id),
     )
     return templates.TemplateResponse(request, "recipient/accepted.html", context)
+
+
+@router.get("/recipient/refused/{delivery_id}", response_class=HTMLResponse)
+async def recipient_refused(request: Request, delivery_id: str) -> HTMLResponse:
+    """Render the post-refusal view.
+
+    Shows delivery details with sender identity revealed (per CPCE),
+    and refusal proof download. Content is not accessible after refusal.
+    """
+    templates = _get_templates(request)
+    context = build_template_context(
+        request,
+        user=_mock_user("sender"),  # Mock - would be recipient
+        delivery=_mock_delivery_refused(delivery_id),
+    )
+    return templates.TemplateResponse(request, "recipient/refused.html", context)
+
+
+@router.get("/recipient/inbox", response_class=HTMLResponse)
+async def recipient_inbox(
+    request: Request,
+    filter: str | None = None,
+    page: int = 1,
+) -> HTMLResponse:
+    """Render the recipient inbox view.
+
+    Lists pending deliveries with status indicators and filter options.
+    Pre-acceptance deliveries show redacted sender identity per REQ-F03.
+    """
+    templates = _get_templates(request)
+
+    # Get mock inbox data (real implementation would query database)
+    deliveries, total = _mock_inbox_deliveries(filter)
+
+    # Pagination parameters
+    page_size = 20
+    total_pages = max(1, (total + page_size - 1) // page_size)
+
+    context = build_template_context(
+        request,
+        user=_mock_user("sender"),  # Mock - would be recipient
+        deliveries=deliveries,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        filter=filter,
+    )
+    return templates.TemplateResponse(request, "recipient/inbox.html", context)
 
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)

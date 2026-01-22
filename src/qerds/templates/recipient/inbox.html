@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('inbox.title') }}{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block main %}
+<div class="container">
+    <header class="page-header page-header--with-actions">
+        <div>
+            <h1 class="page-title">{{ _('inbox.title') }}</h1>
+            <p class="page-description">{{ _('inbox.description') }}</p>
+        </div>
+    </header>
+
+    <!-- Filter options -->
+    <div class="inbox-filters mb-6">
+        <div class="inbox-filter-group" style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;">
+            <span style="font-size: var(--text-sm); color: var(--text-secondary); margin-right: var(--space-2);">{{ _('inbox.filter_by') }}:</span>
+            <a href="/recipient/inbox?filter=all" class="btn btn--sm {% if filter == 'all' or not filter %}btn--primary{% else %}btn--ghost{% endif %}">
+                {{ _('inbox.filter_all') }}
+            </a>
+            <a href="/recipient/inbox?filter=pending" class="btn btn--sm {% if filter == 'pending' %}btn--primary{% else %}btn--ghost{% endif %}">
+                {{ _('inbox.filter_pending') }}
+            </a>
+            <a href="/recipient/inbox?filter=accepted" class="btn btn--sm {% if filter == 'accepted' %}btn--primary{% else %}btn--ghost{% endif %}">
+                {{ _('inbox.filter_accepted') }}
+            </a>
+            <a href="/recipient/inbox?filter=refused" class="btn btn--sm {% if filter == 'refused' %}btn--primary{% else %}btn--ghost{% endif %}">
+                {{ _('inbox.filter_refused') }}
+            </a>
+            <a href="/recipient/inbox?filter=expired" class="btn btn--sm {% if filter == 'expired' %}btn--primary{% else %}btn--ghost{% endif %}">
+                {{ _('inbox.filter_expired') }}
+            </a>
+        </div>
+    </div>
+
+    {% if deliveries %}
+    <div class="inbox-list">
+        {% for delivery in deliveries %}
+        <article class="inbox-item">
+            <div class="inbox-item-status">
+                {% if delivery.status == 'available' or delivery.status == 'notified' %}
+                <span class="status-badge status--available">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+                    {{ _('status.available') }}
+                </span>
+                {% elif delivery.status == 'accepted' %}
+                <span class="status-badge status--accepted">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+                    {{ _('status.accepted') }}
+                </span>
+                {% elif delivery.status == 'refused' %}
+                <span class="status-badge status--refused">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg>
+                    {{ _('status.refused') }}
+                </span>
+                {% elif delivery.status == 'expired' %}
+                <span class="status-badge status--expired">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+                    {{ _('status.expired') }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="inbox-item-content">
+                <div class="inbox-item-header">
+                    <h2 class="inbox-item-subject">
+                        {% if delivery.subject %}
+                            {{ delivery.subject }}
+                        {% else %}
+                            <span style="color: var(--text-tertiary); font-style: italic;">{{ _('delivery.no_subject') }}</span>
+                        {% endif %}
+                    </h2>
+                    <span class="inbox-item-date">{{ delivery.created_at_formatted }}</span>
+                </div>
+
+                <div class="inbox-item-meta">
+                    {% if delivery.sender_name %}
+                    <span class="inbox-item-sender">
+                        <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem;">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+                        </svg>
+                        {{ delivery.sender_name }}
+                    </span>
+                    {% else %}
+                    <span class="inbox-item-sender inbox-item-sender--hidden">
+                        <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem;">
+                            <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781z"/>
+                        </svg>
+                        {{ _('delivery.sender_hidden') }}
+                    </span>
+                    {% endif %}
+
+                    {% if delivery.expires_at_formatted and (delivery.status == 'available' or delivery.status == 'notified') %}
+                    <span class="inbox-item-deadline">
+                        <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem; color: var(--color-warning);">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/>
+                        </svg>
+                        {{ _('inbox.deadline') }}: {{ delivery.expires_at_formatted }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <code class="inbox-item-id">{{ delivery.id[:8] }}</code>
+            </div>
+
+            <div class="inbox-item-actions">
+                {% if delivery.status == 'available' or delivery.status == 'notified' %}
+                <a href="/recipient/pickup/{{ delivery.id }}" class="btn btn--primary btn--sm">
+                    {{ _('inbox.view_and_respond') }}
+                </a>
+                {% elif delivery.status == 'accepted' %}
+                <a href="/recipient/accepted/{{ delivery.id }}" class="btn btn--outline btn--sm">
+                    {{ _('inbox.view_details') }}
+                </a>
+                {% elif delivery.status == 'refused' %}
+                <a href="/recipient/refused/{{ delivery.id }}" class="btn btn--outline btn--sm">
+                    {{ _('inbox.view_details') }}
+                </a>
+                {% else %}
+                <a href="/recipient/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">
+                    {{ _('inbox.view_details') }}
+                </a>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <nav class="inbox-pagination mt-8" aria-label="{{ _('inbox.pagination') }}">
+        <div class="pagination-info" style="text-align: center; font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-4);">
+            {{ _('inbox.showing') }} {{ (page - 1) * page_size + 1 }}-{{ [page * page_size, total] | min }} {{ _('inbox.of') }} {{ total }} {{ _('inbox.items') }}
+        </div>
+        <div style="display: flex; justify-content: center; gap: var(--space-2);">
+            {% if page > 1 %}
+            <a href="/recipient/inbox?page={{ page - 1 }}{% if filter %}&filter={{ filter }}{% endif %}" class="btn btn--outline btn--sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem;"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/></svg>
+                {{ _('inbox.previous') }}
+            </a>
+            {% endif %}
+
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                <span class="btn btn--primary btn--sm" style="pointer-events: none;">{{ p }}</span>
+                {% elif p == 1 or p == total_pages or (p >= page - 1 and p <= page + 1) %}
+                <a href="/recipient/inbox?page={{ p }}{% if filter %}&filter={{ filter }}{% endif %}" class="btn btn--ghost btn--sm">{{ p }}</a>
+                {% elif p == 2 or p == total_pages - 1 %}
+                <span style="align-self: center; color: var(--text-tertiary);">...</span>
+                {% endif %}
+            {% endfor %}
+
+            {% if page < total_pages %}
+            <a href="/recipient/inbox?page={{ page + 1 }}{% if filter %}&filter={{ filter }}{% endif %}" class="btn btn--outline btn--sm">
+                {{ _('inbox.next') }}
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem;"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- Empty state -->
+    <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+        <h2 class="empty-state-title">{{ _('inbox.empty_title') }}</h2>
+        <p class="empty-state-description">{{ _('inbox.empty_description') }}</p>
+    </div>
+    {% endif %}
+
+    <p class="text-center" style="font-size: var(--text-sm); color: var(--text-tertiary); max-width: 32rem; margin: var(--space-8) auto;">
+        <a href="/help/recipient">{{ _('inbox.help') }}</a>
+    </p>
+</div>
+{% endblock %}
