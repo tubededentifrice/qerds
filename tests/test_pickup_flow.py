@@ -395,9 +395,7 @@ class TestAcceptDelivery:
         mock_lifecycle_result.evidence_event = MagicMock()
         mock_lifecycle_result.evidence_event.event_id = uuid4()
 
-        with patch(
-            "qerds.services.lifecycle.DeliveryLifecycleService"
-        ) as mock_lifecycle_cls:
+        with patch("qerds.services.lifecycle.DeliveryLifecycleService") as mock_lifecycle_cls:
             mock_lifecycle = mock_lifecycle_cls.return_value
             mock_lifecycle.accept = AsyncMock(return_value=mock_lifecycle_result)
 
@@ -508,9 +506,7 @@ class TestRefuseDelivery:
         mock_lifecycle_result.evidence_event = MagicMock()
         mock_lifecycle_result.evidence_event.event_id = uuid4()
 
-        with patch(
-            "qerds.services.lifecycle.DeliveryLifecycleService"
-        ) as mock_lifecycle_cls:
+        with patch("qerds.services.lifecycle.DeliveryLifecycleService") as mock_lifecycle_cls:
             mock_lifecycle = mock_lifecycle_cls.return_value
             mock_lifecycle.refuse = AsyncMock(return_value=mock_lifecycle_result)
 
@@ -553,9 +549,7 @@ class TestRefuseDelivery:
         mock_lifecycle_result.success = True
         mock_lifecycle_result.evidence_event = MagicMock()
 
-        with patch(
-            "qerds.services.lifecycle.DeliveryLifecycleService"
-        ) as mock_lifecycle_cls:
+        with patch("qerds.services.lifecycle.DeliveryLifecycleService") as mock_lifecycle_cls:
             mock_lifecycle = mock_lifecycle_cls.return_value
             mock_lifecycle.refuse = AsyncMock(return_value=mock_lifecycle_result)
 
