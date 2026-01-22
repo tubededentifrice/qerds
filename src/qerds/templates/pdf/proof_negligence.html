@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{#
+  Preuve de Negligence (Proof of Non-Claim) PDF Template
+
+  Generated at EVT_EXPIRED event per specs/implementation/30-lifecycle-and-evidence.md
+  This proof is issued when recipient fails to claim within 15-day window.
+
+  Required context variables:
+  - delivery_id: Delivery reference (ID)
+  - deposit_timestamp: Timestamp of initial deposit
+  - notification_timestamp: Timestamp when recipient was notified
+  - expiry_timestamp: Timestamp when 15-day window elapsed
+
+  Optional context variables:
+  - sender_name: Sender name
+  - sender_email: Sender email
+  - sender_organization: Sender organization
+  - sender_address: Sender address
+  - recipient_name: Recipient name (revealed after expiry)
+  - recipient_email: Recipient email (revealed after expiry)
+  - recipient_organization: Recipient organization
+  - recipient_address: Recipient address
+  - subject: Subject line of the delivery
+  - content_hash: SHA-256 hash/digest of content
+  - seal_id: Provider seal ID
+  - seal_timestamp: Seal timestamp
+  - signature_algorithm: Signature algorithm (default: Ed25519)
+  - tsa_info: Timestamp authority info (name, policy_oid, token_id)
+  - verification_url: Verification URL for the proof
+  - proof_id: Unique proof identifier for verification
+
+  Provided by base context:
+  - is_qualified: Whether this is a qualified service
+  - qualification_mode: "qualified" or "non_qualified"
+  - generated_at: Document generation timestamp
+#}
+
+{% block title %}Preuve de Negligence - {{ delivery_id }}{% endblock %}
+
+{% block page_header %}Preuve de Negligence - {{ delivery_id }}{% endblock %}
+
+{% block body_class %}proof-negligence{% endblock %}
+
+{% block content %}
+<h1 class="document-title">Preuve de Negligence</h1>
+<p class="document-subtitle">
+    Lettre Recommandee Electronique {% if is_qualified %}Qualifiee{% else %}(Mode developpement){% endif %}
+</p>
+
+{# Summary Notice - explains what this document attests #}
+<section class="info-section avoid-break">
+    <div class="qualification-notice {% if is_qualified %}qualification-notice--qualified{% else %}qualification-notice--dev{% endif %}">
+        <p>
+            <strong>Attestation de non-retrait</strong> : Le destinataire n'a pas retire l'envoi
+            dans le delai legal de 15 jours suivant la notification.
+        </p>
+    </div>
+</section>
+
+{# Delivery Reference Section #}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Reference de l'envoi</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-value text-mono">{{ delivery_id }}</span>
+        </div>
+        {% if subject %}
+        <div class="info-row">
+            <span class="info-label">Objet</span>
+            <span class="info-value">{{ subject }}</span>
+        </div>
+        {% endif %}
+        <div class="info-row">
+            <span class="info-label">Statut</span>
+            <span class="info-value">
+                <span class="status-badge status-badge--warning">
+                    Non retire - Expire
+                </span>
+            </span>
+        </div>
+    </div>
+</section>
+
+{# Timeline Section - Critical dates for legal proof #}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Chronologie de l'envoi</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Date et heure de depot</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Date et heure de notification</span>
+            <span class="info-value">{{ notification_timestamp|format_datetime if notification_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Date et heure d'expiration</span>
+            <span class="info-value">{{ expiry_timestamp|format_datetime if expiry_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Delai de retrait</span>
+            <span class="info-value">15 jours (Article L.100 CPCE)</span>
+        </div>
+    </div>
+</section>
+
+{# Sender Information Section #}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Expediteur</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identite</span>
+            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+        </div>
+        {% if sender_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ sender_organization }}</span>
+        </div>
+        {% endif %}
+        {% if sender_email %}
+        <div class="info-row">
+            <span class="info-label">Adresse e-mail</span>
+            <span class="info-value">{{ sender_email }}</span>
+        </div>
+        {% endif %}
+        {% if sender_address %}
+        <div class="info-row">
+            <span class="info-label">Adresse</span>
+            <span class="info-value">{{ sender_address }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{# Recipient Information Section (revealed after expiry per CPCE) #}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Destinataire</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identite</span>
+            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+        </div>
+        {% if recipient_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ recipient_organization }}</span>
+        </div>
+        {% endif %}
+        <div class="info-row">
+            <span class="info-label">Adresse e-mail</span>
+            <span class="info-value">{{ recipient_email|default('Non specifie') }}</span>
+        </div>
+        {% if recipient_address %}
+        <div class="info-row">
+            <span class="info-label">Adresse</span>
+            <span class="info-value">{{ recipient_address }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{# Content Integrity Section #}
+{% if content_hash %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Integrite du contenu</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Empreinte numerique (SHA-256)</span>
+            <span class="info-value crypto-data">{{ content_hash }}</span>
+        </div>
+    </div>
+    <p class="text-small text-muted mt-2">
+        Cette empreinte permet de verifier que le contenu de l'envoi n'a pas ete modifie
+        depuis son depot.
+    </p>
+</section>
+{% endif %}
+
+{# Provider Seal Section #}
+<section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
+    <h3 class="seal-title">
+        {% if is_qualified %}
+        Sceau electronique qualifie du prestataire
+        {% else %}
+        Sceau electronique (non qualifie - developpement)
+        {% endif %}
+    </h3>
+    <dl class="seal-details">
+        <dt>Algorithme de signature</dt>
+        <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
+
+        <dt>Horodatage du sceau</dt>
+        <dd>{{ seal_timestamp|format_datetime if seal_timestamp else expiry_timestamp|format_datetime if expiry_timestamp else generated_at|format_datetime }}</dd>
+
+        {% if seal_id %}
+        <dt>Identifiant du sceau</dt>
+        <dd class="text-mono">{{ seal_id }}</dd>
+        {% endif %}
+    </dl>
+</section>
+
+{# Timestamp Authority Info Section #}
+{% if tsa_info or is_qualified %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Autorite d'horodatage</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Service d'horodatage</span>
+            <span class="info-value">
+                {% if tsa_info and tsa_info.name %}
+                    {{ tsa_info.name }}
+                {% elif is_qualified %}
+                    Service d'horodatage qualifie eIDAS
+                {% else %}
+                    Service d'horodatage (developpement)
+                {% endif %}
+            </span>
+        </div>
+        {% if tsa_info and tsa_info.policy_oid %}
+        <div class="info-row">
+            <span class="info-label">Politique (OID)</span>
+            <span class="info-value text-mono">{{ tsa_info.policy_oid }}</span>
+        </div>
+        {% endif %}
+        {% if tsa_info and tsa_info.token_id %}
+        <div class="info-row">
+            <span class="info-label">Identifiant du jeton</span>
+            <span class="info-value text-mono">{{ tsa_info.token_id }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{# Verification Instructions Section #}
+<section class="verification-section avoid-break">
+    <h2 class="info-section-title">Verification de la preuve</h2>
+    <div class="verification-content">
+        <p class="verification-instruction">
+            Pour verifier l'authenticite de cette preuve de negligence, utilisez le service
+            de verification QERDS avec les informations suivantes :
+        </p>
+        <div class="info-grid">
+            {% if proof_id %}
+            <div class="info-row">
+                <span class="info-label">Identifiant de la preuve</span>
+                <span class="info-value text-mono">{{ proof_id }}</span>
+            </div>
+            {% endif %}
+            <div class="info-row">
+                <span class="info-label">Reference de l'envoi</span>
+                <span class="info-value text-mono">{{ delivery_id }}</span>
+            </div>
+            {% if verification_url %}
+            <div class="info-row">
+                <span class="info-label">URL de verification</span>
+                <span class="info-value">{{ verification_url }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{# Qualification Label Section #}
+<section class="qualification-section avoid-break">
+    {% if is_qualified %}
+    <div class="qualification-notice qualification-notice--qualified">
+        <h3>Service de Lettre Recommandee Electronique Qualifie</h3>
+        <p>
+            Cette preuve de negligence est emise par un prestataire de services de confiance
+            qualifie conformement au reglement (UE) n 910/2014 (eIDAS) et au Code des
+            Postes et des Communications Electroniques (CPCE).
+        </p>
+        <p>
+            Elle atteste que le destinataire n'a pas retire l'envoi recommande electronique
+            dans le delai legal de 15 jours suivant la notification, conformement a l'article
+            L.100 du CPCE. L'envoi est repute avoir ete presente au destinataire.
+        </p>
+    </div>
+    {% else %}
+    <div class="qualification-notice qualification-notice--dev">
+        <h3>Mode developpement - Service non qualifie</h3>
+        <p>
+            <strong>ATTENTION :</strong> Cette preuve a ete generee en mode
+            developpement. Elle n'a pas de valeur juridique et ne constitue pas
+            une preuve qualifiee au sens du reglement eIDAS.
+        </p>
+        <p>
+            Pour des envois ayant valeur legale, utilisez un service de Lettre
+            Recommandee Electronique Qualifiee (LREQ).
+        </p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block verification_info %}
+Pour verifier l'authenticite de cette preuve de negligence, utilisez le service de
+verification QERDS avec l'identifiant {{ delivery_id }}{% if proof_id %} et la
+reference de preuve {{ proof_id }}{% endif %}.
+{% endblock %}
