@@ -150,6 +150,12 @@ ignore = [
 "src/qerds/**/__init__.py" = [
     "D104",   # Package docstrings optional
 ]
+"src/qerds/api/schemas/**/*.py" = [
+    "TCH003", # Pydantic models need runtime access to stdlib types
+]
+"src/qerds/api/routers/**/*.py" = [
+    "TCH003", # FastAPI routes need runtime access to stdlib types for path params
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
