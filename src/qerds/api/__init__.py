@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from qerds.api.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
 from qerds.api.routers import (
     admin_router,
+    as4_router,
     auth_router,
     consent_router,
     pickup_router,
@@ -208,3 +209,4 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(consent_router)
     app.include_router(verify_router)
     app.include_router(admin_router)
+    app.include_router(as4_router)  # Domibus AS4 webhook callbacks (REQ-C04)

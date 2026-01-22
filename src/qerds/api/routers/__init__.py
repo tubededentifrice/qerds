@@ -9,9 +9,11 @@ Each router handles a specific API namespace per specs/implementation/35-apis.md
 - consent: Consumer consent management (REQ-F06)
 - verify: Third-party verification (public but token-gated)
 - admin: Operational/admin endpoints (admin auth)
+- as4: AS4/Domibus webhook callbacks (REQ-C04)
 """
 
 from qerds.api.routers.admin import router as admin_router
+from qerds.api.routers.as4 import router as as4_router
 from qerds.api.routers.auth import router as auth_router
 from qerds.api.routers.consent import router as consent_router
 from qerds.api.routers.pages import router as pages_router
@@ -22,6 +24,7 @@ from qerds.api.routers.verify import router as verify_router
 
 __all__ = [
     "admin_router",
+    "as4_router",
     "auth_router",
     "consent_router",
     "pages_router",
