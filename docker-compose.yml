@@ -11,6 +11,8 @@
 #   - interop: Enable with: docker compose --profile interop up
 #     - domibus: AS4 Message Service Handler (ETSI EN 319 522 interoperability)
 #     - domibus-mysql: MySQL 5.7 database for Domibus (AS4 gateway only)
+#     - smp: phoss SMP for BDXR/Peppol metadata publishing
+#     - smp-postgres: PostgreSQL 16 database for phoss SMP
 #   - security-tools: Enable with: docker compose --profile security-tools up
 #     - registry: Internal OCI registry for air-gapped tooling
 #
@@ -164,6 +166,68 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # SMP/BDXR Metadata Publishing (REQ-C04 - ETSI EN 319 522)
+  # Enable with: docker compose --profile interop up
+  # See: smp/README.md for setup instructions
+  # --------------------------------------------------------------------------
+
+  # PostgreSQL 16 - Database for phoss SMP (separate from QERDS PostgreSQL)
+  # phoss SMP supports PostgreSQL 13/14+ with Flyway migrations
+  smp-postgres:
+    image: postgres:16-alpine
+    profiles: ["interop"]
+    environment:
+      POSTGRES_DB: smp
+      POSTGRES_USER: smp
+      POSTGRES_PASSWORD: ${SMP_DB_PASSWORD:-smp_dev_password}
+    volumes:
+      - smp_postgres_data:/var/lib/postgresql/data
+    # Internal only - no host port needed, accessed by smp container
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smp -d smp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # phoss SMP - BDXR/Peppol Service Metadata Publisher
+  # Reference: https://github.com/phax/phoss-smp
+  # Supports: Peppol SMP 1.x, OASIS BDXR SMP 1.0/2.0
+  smp:
+    image: phelger/phoss-smp-sql:latest
+    profiles: ["interop"]
+    environment:
+      # Configuration file location
+      CONFIG_FILE: /config/application.properties
+      # Java memory settings
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+      # Pass database password to application.properties
+      SMP_DB_PASSWORD: ${SMP_DB_PASSWORD:-smp_dev_password}
+      SMP_ADMIN_PASSWORD: ${SMP_ADMIN_PASSWORD:-smp_admin_dev}
+    volumes:
+      # Configuration files
+      - ./smp/config/application.properties:/config/application.properties:ro
+      - ./smp/config/logback.xml:/config/logback.xml:ro
+      # Persistent data
+      - smp_data:/home/git/conf
+      - smp_logs:/var/log/smp
+    # Bind to localhost only per CLAUDE.md
+    ports:
+      - "127.0.0.1:8280:8080"   # SMP REST API + Admin UI
+    depends_on:
+      smp-postgres:
+        condition: service_healthy
+    healthcheck:
+      # Check SMP status endpoint is responding
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
@@ -341,6 +405,10 @@ volumes:
   domibus_mysql_data:
   domibus_data:
   domibus_logs:
+  # SMP/BDXR metadata publishing (phoss SMP)
+  smp_postgres_data:
+  smp_data:
+  smp_logs:
   # Security tools (optional profile)
   registry_data:
   registry_auth:
