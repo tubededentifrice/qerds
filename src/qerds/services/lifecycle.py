@@ -64,12 +64,14 @@ class JurisdictionProfile:
         acceptance_window_days: Number of days for acceptance window.
         requires_notification_delivery_proof: Whether delivery proof is required.
         redaction_profile: Pre-acceptance redaction rules to apply.
+        requires_recipient_consent: Whether prior consent is required (REQ-F06).
     """
 
     code: str
     acceptance_window_days: int
     requires_notification_delivery_proof: bool
     redaction_profile: str
+    requires_recipient_consent: bool = False
 
 
 # Standard jurisdiction profiles
@@ -79,12 +81,14 @@ JURISDICTION_PROFILES: dict[str, JurisdictionProfile] = {
         acceptance_window_days=15,
         requires_notification_delivery_proof=False,
         redaction_profile="eidas_default",
+        requires_recipient_consent=False,  # eIDAS does not require prior consent
     ),
     "fr_lre": JurisdictionProfile(
         code="fr_lre",
         acceptance_window_days=15,  # CPCE requires minimum 15 days
         requires_notification_delivery_proof=True,  # LRE needs delivery confirmation
         redaction_profile="fr_lre_cpce",  # French CPCE sender redaction rules
+        requires_recipient_consent=True,  # CPCE REQ-F06: consumer consent required
     ),
 }
 
@@ -118,6 +122,18 @@ class DeliveryExpiredError(Exception):
     def __init__(self, delivery_id: UUID) -> None:
         self.delivery_id = delivery_id
         super().__init__(f"Delivery {delivery_id} has expired")
+
+
+class ConsentRequiredForDeliveryError(Exception):
+    """Raised when recipient consent is required but not granted (REQ-F06)."""
+
+    def __init__(self, recipient_party_id: UUID, jurisdiction_profile: str) -> None:
+        self.recipient_party_id = recipient_party_id
+        self.jurisdiction_profile = jurisdiction_profile
+        super().__init__(
+            f"Recipient consent required for {jurisdiction_profile} delivery "
+            f"to party {recipient_party_id}"
+        )
 
 
 class DeliveryLifecycleService:
@@ -378,6 +394,56 @@ class DeliveryLifecycleService:
             error=None,
         )
 
+    async def verify_recipient_consent(
+        self,
+        recipient_party_id: UUID,
+        jurisdiction_profile: str,
+    ) -> bool:
+        """Verify recipient has valid consent for LRE delivery (REQ-F06).
+
+        This method should be called before creating or depositing a delivery
+        when the jurisdiction requires prior recipient consent.
+
+        Args:
+            recipient_party_id: UUID of the recipient party.
+            jurisdiction_profile: Jurisdiction profile (e.g., "fr_lre", "eidas").
+
+        Returns:
+            True if consent is valid or not required.
+
+        Raises:
+            ConsentRequiredForDeliveryError: If consent is required but not granted.
+        """
+        profile = self.get_jurisdiction_profile(jurisdiction_profile)
+
+        # If profile doesn't require consent, return True
+        if not profile.requires_recipient_consent:
+            return True
+
+        # Import consent service and check
+        from qerds.services.consent import ConsentRequiredError, ConsentService
+
+        consent_service = ConsentService(self._session)
+
+        try:
+            await consent_service.verify_consent_for_delivery(
+                recipient_party_id=recipient_party_id,
+                jurisdiction_profile=jurisdiction_profile,
+            )
+            return True
+        except ConsentRequiredError as e:
+            logger.warning(
+                "Delivery blocked: recipient consent not granted",
+                extra={
+                    "recipient_party_id": str(recipient_party_id),
+                    "jurisdiction_profile": jurisdiction_profile,
+                },
+            )
+            raise ConsentRequiredForDeliveryError(
+                recipient_party_id=recipient_party_id,
+                jurisdiction_profile=jurisdiction_profile,
+            ) from e
+
     async def deposit(
         self,
         delivery_id: UUID,
@@ -387,6 +453,7 @@ class DeliveryLifecycleService:
         content_hashes: list[str] | None = None,
         event_metadata: dict[str, Any] | None = None,
         policy_snapshot_id: UUID | None = None,
+        verify_consent: bool = True,
     ) -> TransitionResult:
         """Deposit content and transition to DEPOSITED state.
 
@@ -399,10 +466,24 @@ class DeliveryLifecycleService:
             content_hashes: SHA-256 hashes of deposited content objects.
             event_metadata: Additional metadata for the evidence event.
             policy_snapshot_id: Optional policy snapshot ID.
+            verify_consent: Whether to verify recipient consent (REQ-F06).
 
         Returns:
             TransitionResult with the evidence event.
+
+        Raises:
+            ConsentRequiredForDeliveryError: If consent is required but not granted.
         """
+        # Get delivery to check jurisdiction and recipient
+        delivery = await self.get_delivery(delivery_id)
+
+        # Verify consent if required (REQ-F06)
+        if verify_consent and delivery.recipient_party_id:
+            await self.verify_recipient_consent(
+                recipient_party_id=delivery.recipient_party_id,
+                jurisdiction_profile=delivery.jurisdiction_profile,
+            )
+
         # Merge content hashes into metadata
         metadata = dict(event_metadata) if event_metadata else {}
         if content_hashes:
