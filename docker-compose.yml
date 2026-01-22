@@ -7,6 +7,13 @@
 #   - mailpit: Email testing (SMTP + Web UI)
 #   - mocks: UI mockups server
 #
+# Optional profiles:
+#   - interop: Enable with: docker compose --profile interop up
+#     - domibus: AS4 Message Service Handler (ETSI EN 319 522 interoperability)
+#     - domibus-mysql: MySQL 5.7 database for Domibus (AS4 gateway only)
+#   - security-tools: Enable with: docker compose --profile security-tools up
+#     - registry: Internal OCI registry for air-gapped tooling
+#
 # Placeholder services (commented until Python project exists):
 #   - qerds-api: FastAPI application
 #   - qerds-worker: Background job runner
@@ -90,6 +97,73 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # AS4 Interoperability Services (REQ-C04 - ETSI EN 319 522)
+  # Enable with: docker compose --profile interop up
+  # See: docs/deployment/as4-gateway.md for setup instructions
+  # --------------------------------------------------------------------------
+
+  # MySQL 5.7 - Database for Domibus AS4 gateway (separate from QERDS PostgreSQL)
+  # Domibus requires MySQL; cannot share PostgreSQL with qerds-api
+  # NOTE: Using MySQL 5.7 for compatibility with FIWARE Domibus image (Domibus 4.0)
+  # which uses an older MySQL JDBC driver that doesn't support MySQL 8's caching_sha2_password
+  domibus-mysql:
+    image: mysql:5.7
+    profiles: ["interop"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DOMIBUS_MYSQL_ROOT_PASSWORD:-domibus_root_dev}
+      MYSQL_DATABASE: domibus
+      MYSQL_USER: domibus
+      MYSQL_PASSWORD: ${DOMIBUS_DB_PASSWORD:-domibus_dev_password}
+    volumes:
+      - domibus_mysql_data:/var/lib/mysql
+      # Database initialization scripts (Domibus 4.0 schema)
+      - ./domibus/sql:/docker-entrypoint-initdb.d:ro
+    # Internal only - no host port needed, accessed by domibus container
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DOMIBUS_MYSQL_ROOT_PASSWORD:-domibus_root_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Domibus AS4 Message Service Handler - ETSI EN 319 522 interoperability
+  # Reference: https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/Domibus
+  domibus:
+    image: fiware/domibus-tomcat:latest
+    profiles: ["interop"]
+    environment:
+      # Database connection (to domibus-mysql)
+      DB_HOST: domibus-mysql
+      DB_PORT: "3306"
+      DB_NAME: domibus
+      DB_USER: domibus
+      DB_PASS: ${DOMIBUS_DB_PASSWORD:-domibus_dev_password}
+      # Java memory settings
+      JAVA_OPTS: "-Xms512m -Xmx1024m"
+    volumes:
+      # Configuration files
+      - ./domibus/config/domibus.properties:/opt/domibus/conf/domibus/domibus.properties:ro
+      - ./domibus/config/logback.xml:/opt/domibus/conf/domibus/logback.xml:ro
+      # Persistent data
+      - domibus_data:/opt/domibus/data
+      - domibus_logs:/opt/domibus/logs
+    # Bind to localhost only per CLAUDE.md
+    ports:
+      - "127.0.0.1:8180:8080"   # Admin Console + WS Plugin
+    depends_on:
+      domibus-mysql:
+        condition: service_healthy
+    healthcheck:
+      # Check Tomcat is responding (Domibus app deployment takes time)
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
 
   # --------------------------------------------------------------------------
@@ -263,6 +337,10 @@ volumes:
   # Core infrastructure
   postgres_data:
   minio_data:
+  # AS4 interoperability (Domibus)
+  domibus_mysql_data:
+  domibus_data:
+  domibus_logs:
   # Security tools (optional profile)
   registry_data:
   registry_auth:

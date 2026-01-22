@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Domibus Logging Configuration for QERDS -->
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- Console output for Docker logs -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File output for persistent logs -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/opt/domibus/logs/domibus.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/opt/domibus/logs/domibus.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>50MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Domibus core -->
+    <logger name="eu.domibus" level="INFO"/>
+
+    <!-- More verbose for MSH operations during development -->
+    <logger name="eu.domibus.core.ebms3" level="DEBUG"/>
+    <logger name="eu.domibus.plugin" level="DEBUG"/>
+
+    <!-- Security-related logging -->
+    <logger name="eu.domibus.core.certificate" level="INFO"/>
+    <logger name="eu.domibus.core.security" level="INFO"/>
+
+    <!-- Database operations -->
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>
+
+    <!-- Spring framework -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework.web" level="INFO"/>
+
+    <!-- Apache CXF (SOAP/WS) -->
+    <logger name="org.apache.cxf" level="WARN"/>
+
+    <!-- Reduce noise from libraries -->
+    <logger name="org.apache.activemq" level="WARN"/>
+    <logger name="org.apache.catalina" level="WARN"/>
+    <logger name="org.quartz" level="WARN"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
