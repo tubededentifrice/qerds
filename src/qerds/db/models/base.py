@@ -87,6 +87,7 @@ class DeliveryState(enum.Enum):
         DRAFT: Delivery created but not yet deposited
         DEPOSITED: Content deposited, ready for notification
         NOTIFIED: Recipient has been notified
+        NOTIFICATION_FAILED: Notification delivery failed (requires retry/manual handling)
         AVAILABLE: Content available for recipient pickup
         ACCEPTED: Recipient explicitly accepted delivery
         REFUSED: Recipient explicitly refused delivery
@@ -97,6 +98,7 @@ class DeliveryState(enum.Enum):
     DRAFT = "draft"
     DEPOSITED = "deposited"
     NOTIFIED = "notified"
+    NOTIFICATION_FAILED = "notification_failed"
     AVAILABLE = "available"
     ACCEPTED = "accepted"
     REFUSED = "refused"
@@ -186,6 +188,7 @@ class EventType(enum.Enum):
     EVT_CONTENT_DOWNLOADED = "evt_content_downloaded"
     EVT_ACCEPTED = "evt_accepted"
     EVT_REFUSED = "evt_refused"
+    EVT_RECEIVED = "evt_received"
     EVT_EXPIRED = "evt_expired"
     EVT_RETENTION_EXTENDED = "evt_retention_extended"
     EVT_RETENTION_DELETED = "evt_retention_deleted"
