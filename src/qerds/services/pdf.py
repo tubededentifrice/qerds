@@ -579,6 +579,93 @@ class PDFGenerator:
 
         return self.render_proof(template_name="deposit.html", context=context)
 
+    def generate_refusal_proof(
+        self,
+        evidence_data: dict[str, Any],
+    ) -> PDFResult:
+        """Generate a Preuve de Refus (Proof of Refusal) PDF.
+
+        This method generates a proof of refusal document for when a recipient
+        explicitly refuses a registered electronic delivery. It is triggered by
+        the EVT_REFUSED event and includes all required CPCE/LRE information.
+
+        The generated PDF includes:
+        - Provider header with logo
+        - Document title: "Preuve de Refus"
+        - Delivery reference and timestamps
+        - Sender identity and address
+        - Recipient identity (revealed after refusal per CPCE)
+        - Subject line (if provided)
+        - Content hash/digest (if provided)
+        - Provider electronic seal visualization
+        - Timestamp authority information (if provided)
+        - Verification instructions
+
+        Args:
+            evidence_data: Dictionary containing refusal evidence data.
+                Required keys:
+                    - delivery_id: Unique delivery identifier
+                    - refusal_timestamp: ISO 8601 timestamp of refusal
+                Optional keys:
+                    - deposit_timestamp: ISO 8601 timestamp of deposit
+                    - sender_name: Sender's name
+                    - sender_email: Sender's email address
+                    - sender_organization: Sender's organization
+                    - sender_address: Sender's postal address
+                    - recipient_name: Recipient's name
+                    - recipient_email: Recipient's email address
+                    - recipient_organization: Recipient's organization
+                    - recipient_address: Recipient's postal address
+                    - subject: Subject line of the delivery
+                    - content_hash: SHA-256 hash of content
+                    - hash_algorithm: Algorithm used for content hash (default: SHA-256)
+                    - seal_id: Provider seal identifier
+                    - signature_algorithm: Signature algorithm (default: Ed25519)
+                    - provider_name: Provider name (default: QERDS)
+                    - timestamp_authority: Dict with name, policy_oid, serial_number
+                    - proof_id: Unique proof identifier
+                    - verification_url: URL for verification
+
+        Returns:
+            PDFResult containing the generated PDF bytes and metadata.
+
+        Raises:
+            PDFGenerationError: If PDF generation fails due to missing
+                required fields or rendering errors.
+
+        Example:
+            >>> generator = PDFGenerator()
+            >>> result = generator.generate_refusal_proof({
+            ...     "delivery_id": "del-abc123",
+            ...     "refusal_timestamp": "2026-01-22T14:30:00Z",
+            ...     "sender_name": "Jean Dupont",
+            ...     "recipient_name": "Marie Martin",
+            ... })
+            >>> result.content.startswith(b"%PDF")
+            True
+        """
+        # Validate required fields
+        if "delivery_id" not in evidence_data:
+            raise PDFGenerationError(
+                "Missing required field: delivery_id",
+                template_name="proof_refusal.html",
+            )
+        if "refusal_timestamp" not in evidence_data:
+            raise PDFGenerationError(
+                "Missing required field: refusal_timestamp",
+                template_name="proof_refusal.html",
+            )
+
+        logger.info(
+            "Generating refusal proof PDF for delivery_id=%s",
+            evidence_data.get("delivery_id"),
+        )
+
+        return self.render_proof(
+            template_name="proof_refusal.html",
+            context=evidence_data,
+        )
+
     @property
     def qualification_mode(self) -> str:
         """Get the current qualification mode."""
