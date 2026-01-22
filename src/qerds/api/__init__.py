@@ -5,6 +5,8 @@ FastAPI application providing:
 - Delivery lifecycle state machine enforcement
 - Evidence creation orchestration
 - Authorization, audit logging, and export endpoints
+- Jinja2 template rendering for HTML pages
+- Static file serving (CSS, JS, fonts)
 
 This module provides the app factory pattern for creating configured
 FastAPI instances suitable for testing and production deployment.
@@ -13,16 +15,23 @@ FastAPI instances suitable for testing and production deployment.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from qerds.api.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
 from qerds.api.routers import admin_router, recipient_router, sender_router, verify_router
+from qerds.api.routers.pages import router as pages_router
+from qerds.api.templates import get_templates
 
 if TYPE_CHECKING:
     from qerds.core.config import Settings
+
+# Static files directory (src/qerds/static/)
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +60,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     This factory function creates a fully configured FastAPI app with:
     - API namespace routers mounted at appropriate prefixes
+    - HTML page routes for the frontend
+    - Static file serving (CSS, JS, fonts)
+    - Jinja2 template configuration
     - Request ID middleware for distributed tracing
     - Error handling middleware for consistent JSON responses
     - CORS middleware (configurable via settings)
@@ -93,6 +105,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Store settings in app state for access in routes
     app.state.settings = settings
+
+    # Configure Jinja2 templates
+    app.state.templates = get_templates()
+
+    # Mount static files (CSS, JS, fonts)
+    _mount_static_files(app)
 
     # Add middleware (order matters - first added is outermost)
     _add_middleware(app, settings)
@@ -146,12 +164,33 @@ def _add_middleware(app: FastAPI, settings: Settings | None) -> None:
     )
 
 
+def _mount_static_files(app: FastAPI) -> None:
+    """Mount static file directories.
+
+    Static files are served from src/qerds/static/ at /static/
+    This includes CSS, JS, and self-hosted fonts (no external CDN).
+
+    Args:
+        app: The FastAPI application instance.
+    """
+    if not STATIC_DIR.exists():
+        logger.warning("Static files directory not found: %s", STATIC_DIR)
+        return
+
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    logger.info("Static files mounted from %s", STATIC_DIR)
+
+
 def _include_routers(app: FastAPI) -> None:
     """Include API namespace routers.
 
     Args:
         app: The FastAPI application instance.
     """
+    # HTML page routes (must be first to avoid conflicts with API routes)
+    app.include_router(pages_router)
+
+    # API namespace routers
     app.include_router(sender_router)
     app.include_router(recipient_router)
     app.include_router(verify_router)

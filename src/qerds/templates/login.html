@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Connexion{% endblock %}
+
+{% block body_class %}login-page{% endblock %}
+
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block main %}
+<div class="login-container">
+    <div class="login-brand">
+        <svg class="logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="8" width="40" height="32" rx="2" stroke="currentColor" stroke-width="2.5"/>
+            <path d="M4 14L24 28L44 14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="38" cy="14" r="6" fill="#E1000F"/>
+            <path d="M38 11V17M38 17L35 14M38 17L41 14" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="brand-name">QERDS</span>
+        <span class="brand-tagline">Lettre Recommandée Électronique Qualifiée</span>
+    </div>
+
+    {% if qualification_mode == 'dev' %}
+    <div class="alert alert--warning mb-6">
+        <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div>
+            <strong>Mode développement</strong><br>
+            Ce service n'est pas qualifié. Les preuves générées n'ont pas de valeur juridique.
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="login-card">
+        <h1 class="login-title">Connexion à votre espace</h1>
+
+        <button type="button" class="btn-franceconnect">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+            Se connecter avec FranceConnect+
+        </button>
+
+        <p class="franceconnect-note">
+            FranceConnect+ garantit une identification de niveau élevé (eIDAS Substantiel)
+        </p>
+
+        <div class="login-divider">ou</div>
+
+        <form class="login-form" action="/login" method="POST">
+            <div class="form-group">
+                <label for="email" class="form-label form-label--required">Adresse e-mail</label>
+                <input type="email" id="email" name="email" class="form-input" placeholder="votre@email.fr" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password" class="form-label form-label--required">Mot de passe</label>
+                <input type="password" id="password" name="password" class="form-input" placeholder="••••••••" required>
+                <p class="form-hint"><a href="/forgot-password">Mot de passe oublié ?</a></p>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--block btn--lg mt-4">
+                Se connecter
+            </button>
+        </form>
+
+        <p class="text-center mt-6" style="font-size: var(--text-sm); color: var(--text-secondary);">
+            Pas encore de compte ? <a href="/register">Créer un compte</a>
+        </p>
+    </div>
+
+    <p class="text-center mt-6" style="font-size: var(--text-xs); color: var(--text-tertiary);">
+        En vous connectant, vous acceptez nos <a href="/legal/terms">conditions d'utilisation</a><br>
+        et notre <a href="/legal/privacy">politique de confidentialité</a>.
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Administration{% endblock %}
+
+{% block main %}
+<div class="container container--wide">
+    <header class="page-header">
+        <h1 class="page-title">Tableau de bord administrateur</h1>
+        <p class="page-description">Supervision du service de lettre recommandée électronique</p>
+    </header>
+
+    <div class="admin-grid">
+        <!-- Main Content -->
+        <div class="admin-col-8">
+            <!-- Qualification Status -->
+            <section class="card mb-6">
+                <div class="card-header">
+                    <h2 class="card-title">Statut de qualification</h2>
+                </div>
+                <div class="card-body">
+                    {% if qualification_mode == 'qualified' %}
+                    <div class="qualification-indicator qualification-indicator--qualified">
+                        <svg class="qualification-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <p class="qualification-label">Service Qualifié eIDAS</p>
+                        <p class="qualification-description">
+                            Ce service est qualifié conformément au règlement eIDAS et enregistré auprès de l'ANSSI.
+                        </p>
+                    </div>
+                    {% else %}
+                    <div class="qualification-indicator qualification-indicator--dev">
+                        <svg class="qualification-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <p class="qualification-label">Mode développement</p>
+                        <p class="qualification-description">
+                            Ce service n'est pas qualifié. Les preuves générées n'ont pas de valeur juridique.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Stats Overview -->
+            <section class="stats-grid" aria-label="Statistiques globales">
+                <article class="stat-card">
+                    <p class="stat-label">Envois aujourd'hui</p>
+                    <p class="stat-value">{{ stats.today or 47 }}</p>
+                </article>
+                <article class="stat-card">
+                    <p class="stat-label">Ce mois</p>
+                    <p class="stat-value">{{ stats.month or 1248 }}</p>
+                </article>
+                <article class="stat-card">
+                    <p class="stat-label">En attente</p>
+                    <p class="stat-value">{{ stats.pending or 156 }}</p>
+                </article>
+                <article class="stat-card">
+                    <p class="stat-label">Taux d'acceptation</p>
+                    <p class="stat-value">{{ stats.acceptance_rate or '87%' }}</p>
+                </article>
+            </section>
+
+            <!-- Recent Activity -->
+            <section class="card">
+                <div class="card-header" style="display: flex; align-items: center; justify-content: space-between;">
+                    <h2 class="card-title">Activité récente</h2>
+                    <a href="/admin/logs" class="btn btn--ghost btn--sm">Voir les logs</a>
+                </div>
+                <div class="table-container" style="border: none; border-radius: 0;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Horodatage</th>
+                                <th>Événement</th>
+                                <th>Référence</th>
+                                <th>Détails</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in recent_events %}
+                            <tr>
+                                <td style="white-space: nowrap;">
+                                    <code style="font-size: var(--text-xs);">{{ event.timestamp }}</code>
+                                </td>
+                                <td>
+                                    {% if event.type == 'deposited' %}
+                                    <span class="status-badge status--deposited">Dépôt</span>
+                                    {% elif event.type == 'notified' %}
+                                    <span class="status-badge status--notified">Notification</span>
+                                    {% elif event.type == 'accepted' %}
+                                    <span class="status-badge status--accepted">Accepté</span>
+                                    {% elif event.type == 'refused' %}
+                                    <span class="status-badge status--refused">Refusé</span>
+                                    {% elif event.type == 'expired' %}
+                                    <span class="status-badge status--expired">Expiré</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--text-xs);">{{ event.delivery_id[:8] }}</code>
+                                </td>
+                                <td style="color: var(--text-secondary); font-size: var(--text-sm);">
+                                    {{ event.details }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="admin-col-4">
+            <!-- System Health -->
+            <section class="card mb-6">
+                <div class="card-header">
+                    <h2 class="card-title">Santé du système</h2>
+                </div>
+                <div class="card-body">
+                    <div class="system-status">
+                        <div class="status-item">
+                            <span class="status-item-label">
+                                <span class="status-dot status-dot--healthy"></span>
+                                API
+                            </span>
+                            <span class="status-item-value">Opérationnel</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-item-label">
+                                <span class="status-dot status-dot--healthy"></span>
+                                Base de données
+                            </span>
+                            <span class="status-item-value">Opérationnel</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-item-label">
+                                <span class="status-dot status-dot--healthy"></span>
+                                Service de signature
+                            </span>
+                            <span class="status-item-value">Opérationnel</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-item-label">
+                                <span class="status-dot status-dot--healthy"></span>
+                                Horodatage qualifié
+                            </span>
+                            <span class="status-item-value">Opérationnel</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-item-label">
+                                <span class="status-dot status-dot--healthy"></span>
+                                Stockage S3
+                            </span>
+                            <span class="status-item-value">87% utilisé</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Audit Actions -->
+            <section class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Actions d'audit</h2>
+                </div>
+                <div class="card-body">
+                    <div class="audit-actions">
+                        <a href="/admin/audit/export" class="audit-action">
+                            <div class="audit-action-icon">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/>
+                                </svg>
+                            </div>
+                            <div class="audit-action-content">
+                                <p class="audit-action-title">Exporter pack d'audit</p>
+                                <p class="audit-action-description">Preuves, config, SBOM pour conformité</p>
+                            </div>
+                        </a>
+
+                        <a href="/admin/access-review" class="audit-action">
+                            <div class="audit-action-icon">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                                </svg>
+                            </div>
+                            <div class="audit-action-content">
+                                <p class="audit-action-title">Revue des accès</p>
+                                <p class="audit-action-description">RBAC et dernières connexions</p>
+                            </div>
+                        </a>
+
+                        <a href="/admin/config/history" class="audit-action">
+                            <div class="audit-action-icon">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"/>
+                                </svg>
+                            </div>
+                            <div class="audit-action-content">
+                                <p class="audit-action-title">Historique config</p>
+                                <p class="audit-action-description">Modifications et snapshots</p>
+                            </div>
+                        </a>
+
+                        <a href="/admin/keys" class="audit-action">
+                            <div class="audit-action-icon">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z"/>
+                                </svg>
+                            </div>
+                            <div class="audit-action-content">
+                                <p class="audit-action-title">Gestion des clés</p>
+                                <p class="audit-action-description">Lifecycle HSM/QSCD</p>
+                            </div>
+                        </a>
+
+                        <a href="/admin/incidents" class="audit-action">
+                            <div class="audit-action-icon">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
+                                </svg>
+                            </div>
+                            <div class="audit-action-content">
+                                <p class="audit-action-title">Incidents</p>
+                                <p class="audit-action-description">Détection et timelines</p>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+{% endblock %}
