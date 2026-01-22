@@ -183,10 +183,15 @@ docker compose port domibus 8080
 docker compose logs domibus | tail -50
 ```
 
+## Related Components
+
+- **phoss SMP**: Service metadata publishing for endpoint discovery - see [smp-setup.md](./smp-setup.md)
+
 ## References
 
 - [Domibus Documentation](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/Domibus)
 - [eDelivery AS4 Profile](https://ec.europa.eu/digital-building-blocks/wikis/display/DIGITAL/eDelivery+AS4)
 - [ETSI EN 319 522-4-2](https://www.etsi.org/deliver/etsi_en/319500_319599/3195220402/)
 - [domibus/README.md](../../domibus/README.md)
+- [smp/README.md](../../smp/README.md)
 - [specs/implementation/65-etsi-interop-profile.md](../../specs/implementation/65-etsi-interop-profile.md)

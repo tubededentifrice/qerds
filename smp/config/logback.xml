@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  phoss SMP Logging Configuration for QERDS
+  Reference: https://logback.qos.ch/manual/configuration.html
+-->
+<configuration>
+  <!-- Console appender for Docker logs -->
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- File appender for persistent logs -->
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>/var/log/smp/smp.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <!-- Daily rollover -->
+      <fileNamePattern>/var/log/smp/smp.%d{yyyy-MM-dd}.log</fileNamePattern>
+      <!-- Keep 30 days of history -->
+      <maxHistory>30</maxHistory>
+      <!-- Max total size of 1GB -->
+      <totalSizeCap>1GB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- phoss SMP specific loggers -->
+  <logger name="com.helger" level="INFO"/>
+  <logger name="com.helger.phoss.smp" level="INFO"/>
+  <logger name="com.helger.peppol" level="INFO"/>
+
+  <!-- Database/JDBC logging (set to DEBUG for SQL troubleshooting) -->
+  <logger name="org.flywaydb" level="INFO"/>
+  <logger name="com.zaxxer.hikari" level="INFO"/>
+
+  <!-- Reduce noise from third-party libraries -->
+  <logger name="org.apache.catalina" level="WARN"/>
+  <logger name="org.apache.tomcat" level="WARN"/>
+  <logger name="org.apache.coyote" level="WARN"/>
+  <logger name="org.apache.jasper" level="WARN"/>
+
+  <!-- Spring/Jakarta logging -->
+  <logger name="org.springframework" level="WARN"/>
+  <logger name="jakarta" level="WARN"/>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+    <appender-ref ref="FILE"/>
+  </root>
+</configuration>
