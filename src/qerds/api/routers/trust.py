@@ -20,7 +20,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
 from qerds.services.trust import (
+    DualControlRequiredError,
+    DualControlSameUserError,
     KeyNotFoundError,
+    KeyPurpose,
+    KeyStatusError,
     QualificationMode,
     QualifiedModeNotImplementedError,
     TrustService,
@@ -149,8 +153,8 @@ class KeyInfoResponse(BaseModel):
     qualification_mode: str = Field(description="Qualification status")
 
 
-class KeyInventoryResponse(BaseModel):
-    """Response containing all key information."""
+class KeyListResponse(BaseModel):
+    """Response containing list of keys."""
 
     keys: list[KeyInfoResponse] = Field(description="List of managed keys")
     mode: str = Field(description="Service qualification mode")
@@ -164,10 +168,172 @@ class RotationRequest(BaseModel):
         min_length=10,
         max_length=500,
     )
+    performed_by: str = Field(
+        description="User ID performing the rotation",
+    )
     approved_by: str | None = Field(
         default=None,
         description="Second approver ID (dual-control)",
     )
+
+
+class GenerateKeyRequest(BaseModel):
+    """Request to generate a new key."""
+
+    purpose: str = Field(
+        description="Key purpose (signing, timestamping, kek, audit_log_chain)",
+        pattern="^(signing|timestamping|kek|audit_log_chain)$",
+    )
+    performed_by: str = Field(
+        description="User ID performing the generation",
+    )
+    reason: str = Field(
+        default="Initial key generation",
+        description="Reason for key generation",
+        min_length=5,
+        max_length=500,
+    )
+    auto_activate: bool = Field(
+        default=True,
+        description="Whether to auto-activate the key",
+    )
+
+
+class ActivateKeyRequest(BaseModel):
+    """Request to activate a pending key."""
+
+    performed_by: str = Field(
+        description="User ID performing the activation",
+    )
+    approved_by: str | None = Field(
+        default=None,
+        description="Second approver ID (dual-control)",
+    )
+    reason: str = Field(
+        default="Key activation",
+        description="Reason for activation",
+        min_length=5,
+        max_length=500,
+    )
+
+
+class SuspendKeyRequest(BaseModel):
+    """Request to suspend a key."""
+
+    performed_by: str = Field(
+        description="User ID performing the suspension",
+    )
+    reason: str = Field(
+        description="Reason for suspension",
+        min_length=10,
+        max_length=500,
+    )
+
+
+class UnsuspendKeyRequest(BaseModel):
+    """Request to unsuspend a key."""
+
+    performed_by: str = Field(
+        description="User ID performing the unsuspension",
+    )
+    approved_by: str | None = Field(
+        default=None,
+        description="Second approver ID (dual-control)",
+    )
+    reason: str = Field(
+        description="Reason for unsuspension",
+        min_length=10,
+        max_length=500,
+    )
+
+
+class RevokeKeyRequest(BaseModel):
+    """Request to revoke a key."""
+
+    performed_by: str = Field(
+        description="User ID performing the revocation",
+    )
+    approved_by: str | None = Field(
+        default=None,
+        description="Second approver ID (dual-control)",
+    )
+    reason: str = Field(
+        description="Reason for revocation",
+        min_length=10,
+        max_length=500,
+    )
+
+
+class RetireKeyRequest(BaseModel):
+    """Request to retire a key."""
+
+    performed_by: str = Field(
+        description="User ID performing the retirement",
+    )
+    reason: str = Field(
+        default="Key retirement",
+        description="Reason for retirement",
+        min_length=5,
+        max_length=500,
+    )
+
+
+class KeyLifecycleEventResponse(BaseModel):
+    """Response containing a key lifecycle event."""
+
+    event_id: str = Field(description="Unique event identifier")
+    key_id: str = Field(description="Key identifier")
+    action: str = Field(description="Lifecycle action performed")
+    previous_status: str | None = Field(description="Status before the action")
+    new_status: str = Field(description="Status after the action")
+    performed_by: str = Field(description="User who performed the action")
+    approved_by: str | None = Field(description="Second approver (if any)")
+    reason: str = Field(description="Reason for the action")
+    timestamp: str = Field(description="ISO 8601 timestamp")
+    metadata: dict[str, Any] | None = Field(default=None, description="Additional metadata")
+
+
+class KeyCeremonyLogResponse(BaseModel):
+    """Response containing a key ceremony log."""
+
+    ceremony_id: str = Field(description="Unique ceremony identifier")
+    event: KeyLifecycleEventResponse = Field(description="The lifecycle event")
+    key_info: dict[str, Any] = Field(description="Key information at ceremony time")
+    algorithm_suite: dict[str, Any] = Field(description="Algorithm suite")
+    policy_snapshot_id: str = Field(description="Policy reference")
+    device_info: dict[str, Any] | None = Field(description="HSM/device info (qualified mode)")
+    witnesses: list[str] = Field(description="Witness identifiers")
+    sealed_at: str = Field(description="ISO 8601 timestamp")
+    seal_signature: str = Field(description="Ceremony seal signature")
+
+
+class KeyWithCeremonyResponse(BaseModel):
+    """Response containing key info and ceremony log."""
+
+    key: KeyInfoResponse = Field(description="Key information")
+    ceremony: KeyCeremonyLogResponse = Field(description="Ceremony log")
+
+
+class RotationResponse(BaseModel):
+    """Response for key rotation."""
+
+    old_key: KeyInfoResponse = Field(description="Retired key information")
+    new_key: KeyInfoResponse = Field(description="New active key information")
+    ceremony: KeyCeremonyLogResponse = Field(description="Ceremony log")
+
+
+class KeyInventoryResponse(BaseModel):
+    """Response containing key inventory snapshot."""
+
+    snapshot_id: str = Field(description="Inventory snapshot ID")
+    snapshot_at: str = Field(description="ISO 8601 timestamp")
+    qualification_mode: str = Field(description="Service qualification mode")
+    policy_snapshot_id: str = Field(description="Policy reference")
+    keys: list[KeyInfoResponse] = Field(description="All managed keys")
+    total_keys: int = Field(description="Total number of keys")
+    active_keys: int = Field(description="Number of active keys")
+    pending_keys: int = Field(description="Number of pending activation keys")
+    retired_keys: int = Field(description="Number of retired keys")
 
 
 class HealthResponse(BaseModel):
@@ -447,7 +613,7 @@ async def create_checkpoint(
 
 @router.get(
     "/keys",
-    response_model=KeyInventoryResponse,
+    response_model=KeyListResponse,
     summary="Get key inventory",
     responses={
         200: {"description": "Key inventory retrieved"},
@@ -455,7 +621,7 @@ async def create_checkpoint(
 )
 async def get_keys(
     service: Annotated[TrustService, Depends(get_trust_service)],
-) -> KeyInventoryResponse:
+) -> KeyListResponse:
     """Get metadata for all managed keys.
 
     Returns public key information only - no private material is exposed.
@@ -463,7 +629,7 @@ async def get_keys(
     """
     keys = await service.get_keys()
 
-    return KeyInventoryResponse(
+    return KeyListResponse(
         keys=[
             KeyInfoResponse(
                 key_id=k.key_id,
@@ -484,6 +650,83 @@ async def get_keys(
         ],
         mode=service.mode.value,
     )
+
+
+@router.get(
+    "/keys/inventory",
+    response_model=KeyInventoryResponse,
+    summary="Get complete key inventory snapshot",
+    responses={
+        200: {"description": "Key inventory retrieved"},
+    },
+)
+async def get_key_inventory(
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyInventoryResponse:
+    """Get a complete key inventory snapshot for audit.
+
+    Per REQ-H07, provides key inventory metadata for qualification evidence.
+    """
+    inventory = await service.get_key_inventory()
+
+    return KeyInventoryResponse(
+        snapshot_id=inventory.snapshot_id,
+        snapshot_at=inventory.snapshot_at.isoformat(),
+        qualification_mode=inventory.qualification_mode.value,
+        policy_snapshot_id=inventory.policy_snapshot_id,
+        keys=[_key_info_to_response(k) for k in inventory.keys],
+        total_keys=inventory.total_keys,
+        active_keys=inventory.active_keys,
+        pending_keys=inventory.pending_keys,
+        retired_keys=inventory.retired_keys,
+    )
+
+
+@router.post(
+    "/keys/generate",
+    response_model=KeyWithCeremonyResponse,
+    summary="Generate a new key with ceremony logging",
+    responses={
+        200: {"description": "Key generated successfully"},
+        400: {"description": "Invalid generation request"},
+    },
+)
+async def generate_key(
+    request: GenerateKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Generate a new cryptographic key.
+
+    Per REQ-H07, key generation is a lifecycle event that requires ceremony
+    evidence. The key may start in PENDING_ACTIVATION status or be auto-activated.
+    """
+    try:
+        purpose = KeyPurpose(request.purpose)
+        key_info, ceremony = await service.generate_key(
+            purpose=purpose,
+            performed_by=request.performed_by,
+            reason=request.reason,
+            auto_activate=request.auto_activate,
+        )
+
+        logger.info(
+            "Generated key: %s (purpose: %s, ceremony: %s)",
+            key_info.key_id,
+            purpose.value,
+            ceremony.ceremony_id,
+        )
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except TrustServiceError as e:
+        logger.error("Key generation failed: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
 
 
 @router.get(
@@ -529,37 +772,422 @@ async def get_key(
 
 @router.post(
     "/keys/{key_id}/rotate",
-    response_model=KeyInfoResponse,
-    summary="Rotate a key (dual-control required)",
+    response_model=RotationResponse,
+    summary="Rotate a key (dual-control may be required)",
     responses={
         200: {"description": "Key rotated successfully"},
         400: {"description": "Invalid rotation request"},
+        403: {"description": "Dual-control required"},
         404: {"description": "Key not found"},
-        501: {"description": "Key rotation not yet implemented"},
+        409: {"description": "Key status does not allow rotation"},
     },
 )
 async def rotate_key(
     key_id: Annotated[str, Path(description="Key identifier to rotate")],
     request: RotationRequest,
-    service: Annotated[TrustService, Depends(get_trust_service)],  # noqa: ARG001
-) -> KeyInfoResponse:
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> RotationResponse:
     """Rotate a cryptographic key.
 
-    Per REQ-H07, key rotation requires dual-control (second approver)
-    and generates ceremony log evidence.
-
-    NOTE: Key rotation is not yet implemented. This endpoint returns 501.
+    Per REQ-H07, key rotation may require dual-control (second approver)
+    and generates ceremony log evidence. The old key is retired and a new
+    active key is generated.
     """
-    # Key rotation requires dual-control and ceremony logging
-    # This is a placeholder for the full implementation
-    logger.warning(
-        "Key rotation requested for %s (not yet implemented): reason=%s",
-        key_id,
-        request.reason,
+    try:
+        old_key, new_key, ceremony = await service.rotate_key(
+            key_id,
+            performed_by=request.performed_by,
+            approved_by=request.approved_by,
+            reason=request.reason,
+        )
+
+        logger.info(
+            "Key rotated: %s -> %s (ceremony: %s)",
+            key_id,
+            new_key.key_id,
+            ceremony.ceremony_id,
+        )
+
+        return RotationResponse(
+            old_key=_key_info_to_response(old_key),
+            new_key=_key_info_to_response(new_key),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+    except DualControlRequiredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except DualControlSameUserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except TrustServiceError as e:
+        logger.error("Key rotation failed: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/keys/{key_id}/activate",
+    response_model=KeyWithCeremonyResponse,
+    summary="Activate a pending key",
+    responses={
+        200: {"description": "Key activated successfully"},
+        403: {"description": "Dual-control required"},
+        404: {"description": "Key not found"},
+        409: {"description": "Key is not pending activation"},
+    },
+)
+async def activate_key(
+    key_id: Annotated[str, Path(description="Key identifier to activate")],
+    request: ActivateKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Activate a key that is pending activation.
+
+    Per REQ-H07, activation moves a key from PENDING_ACTIVATION to ACTIVE.
+    """
+    try:
+        key_info, ceremony = await service.activate_key(
+            key_id,
+            performed_by=request.performed_by,
+            approved_by=request.approved_by,
+            reason=request.reason,
+        )
+
+        logger.info("Activated key: %s (ceremony: %s)", key_id, ceremony.ceremony_id)
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+    except DualControlRequiredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except DualControlSameUserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/keys/{key_id}/suspend",
+    response_model=KeyWithCeremonyResponse,
+    summary="Suspend a key temporarily",
+    responses={
+        200: {"description": "Key suspended successfully"},
+        404: {"description": "Key not found"},
+        409: {"description": "Key is not active"},
+    },
+)
+async def suspend_key(
+    key_id: Annotated[str, Path(description="Key identifier to suspend")],
+    request: SuspendKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Suspend a key temporarily.
+
+    Suspending a key prevents it from being used but allows reactivation.
+    """
+    try:
+        key_info, ceremony = await service.suspend_key(
+            key_id,
+            performed_by=request.performed_by,
+            reason=request.reason,
+        )
+
+        logger.warning(
+            "Suspended key: %s (reason: %s, ceremony: %s)",
+            key_id,
+            request.reason,
+            ceremony.ceremony_id,
+        )
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/keys/{key_id}/unsuspend",
+    response_model=KeyWithCeremonyResponse,
+    summary="Unsuspend a suspended key",
+    responses={
+        200: {"description": "Key unsuspended successfully"},
+        403: {"description": "Dual-control required"},
+        404: {"description": "Key not found"},
+        409: {"description": "Key is not suspended"},
+    },
+)
+async def unsuspend_key(
+    key_id: Annotated[str, Path(description="Key identifier to unsuspend")],
+    request: UnsuspendKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Unsuspend a suspended key.
+
+    Returns a suspended key to active status.
+    """
+    try:
+        key_info, ceremony = await service.unsuspend_key(
+            key_id,
+            performed_by=request.performed_by,
+            approved_by=request.approved_by,
+            reason=request.reason,
+        )
+
+        logger.info("Unsuspended key: %s (ceremony: %s)", key_id, ceremony.ceremony_id)
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+    except DualControlRequiredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except DualControlSameUserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/keys/{key_id}/revoke",
+    response_model=KeyWithCeremonyResponse,
+    summary="Revoke a key permanently",
+    responses={
+        200: {"description": "Key revoked successfully"},
+        403: {"description": "Dual-control required"},
+        404: {"description": "Key not found"},
+        409: {"description": "Key is already revoked"},
+    },
+)
+async def revoke_key(
+    key_id: Annotated[str, Path(description="Key identifier to revoke")],
+    request: RevokeKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Revoke a key permanently.
+
+    Per REQ-H07, key revocation is a critical operation. Revoked keys
+    cannot be reactivated.
+    """
+    try:
+        key_info, ceremony = await service.revoke_key(
+            key_id,
+            performed_by=request.performed_by,
+            approved_by=request.approved_by,
+            reason=request.reason,
+        )
+
+        logger.warning(
+            "Revoked key: %s (reason: %s, ceremony: %s)",
+            key_id,
+            request.reason,
+            ceremony.ceremony_id,
+        )
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+    except DualControlRequiredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except DualControlSameUserError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/keys/{key_id}/retire",
+    response_model=KeyWithCeremonyResponse,
+    summary="Retire a key gracefully",
+    responses={
+        200: {"description": "Key retired successfully"},
+        404: {"description": "Key not found"},
+        409: {"description": "Key status does not allow retirement"},
+    },
+)
+async def retire_key(
+    key_id: Annotated[str, Path(description="Key identifier to retire")],
+    request: RetireKeyRequest,
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> KeyWithCeremonyResponse:
+    """Retire a key gracefully.
+
+    Retirement is a normal end-of-life transition for keys being replaced.
+    """
+    try:
+        key_info, ceremony = await service.retire_key(
+            key_id,
+            performed_by=request.performed_by,
+            reason=request.reason,
+        )
+
+        logger.info("Retired key: %s (ceremony: %s)", key_id, ceremony.ceremony_id)
+
+        return KeyWithCeremonyResponse(
+            key=_key_info_to_response(key_info),
+            ceremony=_ceremony_to_response(ceremony),
+        )
+
+    except KeyNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Key not found: {key_id}",
+        ) from e
+    except KeyStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+
+
+@router.get(
+    "/keys/{key_id}/ceremonies",
+    response_model=list[KeyCeremonyLogResponse],
+    summary="Get ceremony logs for a key",
+    responses={
+        200: {"description": "Ceremony logs retrieved"},
+    },
+)
+async def get_key_ceremonies(
+    key_id: Annotated[str, Path(description="Key identifier")],
+    service: Annotated[TrustService, Depends(get_trust_service)],
+) -> list[KeyCeremonyLogResponse]:
+    """Get all ceremony logs for a specific key.
+
+    Returns ceremony evidence for key lifecycle events.
+    """
+    ceremonies = await service.get_lifecycle_events(key_id=key_id)
+    return [_ceremony_to_response(c) for c in ceremonies]
+
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+
+def _key_info_to_response(key_info: Any) -> KeyInfoResponse:
+    """Convert KeyInfo to API response model."""
+    return KeyInfoResponse(
+        key_id=key_info.key_id,
+        purpose=key_info.purpose.value,
+        algorithm={
+            "version": key_info.algorithm.version,
+            "hash_algorithm": key_info.algorithm.hash_algorithm,
+            "signature_algorithm": key_info.algorithm.signature_algorithm,
+            "key_size": key_info.algorithm.key_size,
+        },
+        status=key_info.status.value,
+        created_at=key_info.created_at.isoformat(),
+        expires_at=key_info.expires_at.isoformat() if key_info.expires_at else None,
+        certificate_pem=key_info.certificate_pem,
+        qualification_mode=key_info.qualification_mode.value,
     )
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Key rotation requires dual-control ceremony (not yet implemented)",
+
+
+def _ceremony_to_response(ceremony: Any) -> KeyCeremonyLogResponse:
+    """Convert KeyCeremonyLog to API response model."""
+    return KeyCeremonyLogResponse(
+        ceremony_id=ceremony.ceremony_id,
+        event=KeyLifecycleEventResponse(
+            event_id=ceremony.event.event_id,
+            key_id=ceremony.event.key_id,
+            action=ceremony.event.action.value,
+            previous_status=ceremony.event.previous_status.value
+            if ceremony.event.previous_status
+            else None,
+            new_status=ceremony.event.new_status.value,
+            performed_by=ceremony.event.performed_by,
+            approved_by=ceremony.event.approved_by,
+            reason=ceremony.event.reason,
+            timestamp=ceremony.event.timestamp.isoformat(),
+            metadata=ceremony.event.metadata if ceremony.event.metadata else None,
+        ),
+        key_info=ceremony.key_info,
+        algorithm_suite={
+            "version": ceremony.algorithm_suite.version,
+            "hash_algorithm": ceremony.algorithm_suite.hash_algorithm,
+            "signature_algorithm": ceremony.algorithm_suite.signature_algorithm,
+            "key_size": ceremony.algorithm_suite.key_size,
+        },
+        policy_snapshot_id=ceremony.policy_snapshot_id,
+        device_info=ceremony.device_info,
+        witnesses=ceremony.witnesses,
+        sealed_at=ceremony.sealed_at.isoformat(),
+        seal_signature=ceremony.seal_signature,
     )
 
 
