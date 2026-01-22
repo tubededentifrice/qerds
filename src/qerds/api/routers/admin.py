@@ -7,7 +7,49 @@ Covers requirements: REQ-D02, REQ-D08, REQ-H01, REQ-H03, REQ-H04, REQ-H05, REQ-H
 See specs/implementation/35-apis.md for API design.
 """
 
-from fastapi import APIRouter
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from qerds.api.middleware.auth import AuthenticatedUser, require_role
+from qerds.api.schemas.admin import (
+    AccessReviewExportResponse,
+    AuditPackRequest,
+    AuditPackResponse,
+    AuditPackVerification,
+    ConfigSnapshotRequest,
+    ConfigSnapshotResponse,
+    CreateIncidentRequest,
+    DeliveryIncidentSummary,
+    DeliveryStats,
+    DeliveryTimelineResponse,
+    EvidenceStats,
+    IncidentExportResponse,
+    IncidentResponse,
+    IncidentTimelineEvent,
+    RoleBindingExport,
+    StorageStats,
+    SystemStatsResponse,
+    TimelineEventSummary,
+    UserStats,
+)
+from qerds.db.models.base import AuditStream, QualificationLabel
+from qerds.db.models.deliveries import ContentObject, Delivery
+from qerds.db.models.evidence import EvidenceEvent, EvidenceObject, PolicySnapshot
+from qerds.services.audit_log import AuditLogService
+from qerds.services.security_events import SecurityActor, SecurityEventLogger
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin",
@@ -17,6 +59,52 @@ router = APIRouter(
         403: {"description": "Insufficient admin permissions"},
     },
 )
+
+
+# -----------------------------------------------------------------------------
+# Dependencies
+# -----------------------------------------------------------------------------
+
+
+async def get_db_session() -> AsyncSession:
+    """Get database session.
+
+    Uses the application's async session factory.
+    """
+    from qerds.db import get_async_session
+
+    async with get_async_session() as session:
+        yield session
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+# Require admin_user role for all admin endpoints
+AdminUser = Annotated[AuthenticatedUser, Depends(require_role("admin_user"))]
+
+
+def _get_security_actor(user: AuthenticatedUser, request: Request) -> SecurityActor:  # noqa: ARG001
+    """Build a SecurityActor from the authenticated user and request.
+
+    Args:
+        user: The authenticated admin user.
+        request: The HTTP request (reserved for future use to extract additional context).
+
+    Returns:
+        SecurityActor for audit logging.
+    """
+    return SecurityActor(
+        actor_id=str(user.principal_id),
+        actor_type=user.principal_type,
+        ip_address=user.ip_address,
+        user_agent=user.user_agent,
+        session_id=str(user.session_id) if user.session_id else None,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Health Check
+# -----------------------------------------------------------------------------
 
 
 @router.get("/health")
@@ -29,15 +117,918 @@ async def health() -> dict[str, str]:
     return {"status": "healthy", "namespace": "admin"}
 
 
-# Future endpoints (stubs for documentation):
-# Evidence and audit exports:
-# POST /admin/audit-packs - Generate audit pack for a range
-# GET /admin/deliveries/{id}/timeline - Dispute reconstruction output
-#
-# Security and change management:
-# POST /admin/config/snapshots - Create versioned config snapshot
-# GET /admin/access-reviews/export - Export RBAC bindings for review
-#
-# Incident response:
-# POST /admin/incidents - Create incident record
-# GET /admin/incidents/{id}/export - Export incident timeline bundle
+# -----------------------------------------------------------------------------
+# Audit Pack Generation (REQ-H01)
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/audit-packs",
+    response_model=AuditPackResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate audit pack",
+    description="Generate comprehensive audit pack for a date range with evidence and logs.",
+)
+async def generate_audit_pack(
+    request_body: AuditPackRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> AuditPackResponse:
+    """Generate an audit pack for a specified date range.
+
+    Collects evidence events, audit logs, and config snapshots within
+    the date range and packages them with integrity verification.
+
+    Args:
+        request_body: Audit pack generation parameters.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Audit pack details with storage reference and verification results.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="generate_audit_pack",
+        target_type="audit_pack",
+        target_id=f"{request_body.start_date}_{request_body.end_date}",
+        details={
+            "start_date": request_body.start_date.isoformat(),
+            "end_date": request_body.end_date.isoformat(),
+            "reason": request_body.reason,
+        },
+    )
+
+    # Convert dates to datetime range
+    start_dt = datetime.combine(request_body.start_date, datetime.min.time(), tzinfo=UTC)
+    end_dt = datetime.combine(request_body.end_date, datetime.max.time(), tzinfo=UTC)
+
+    # Collect evidence events in range
+    evidence_count = 0
+    if request_body.include_evidence:
+        evidence_query = select(func.count()).select_from(
+            select(EvidenceEvent)
+            .where(EvidenceEvent.event_time >= start_dt)
+            .where(EvidenceEvent.event_time <= end_dt)
+            .subquery()
+        )
+        evidence_count = (await db.execute(evidence_query)).scalar_one()
+
+    # Verify audit log chains
+    audit_service = AuditLogService(db)
+    evidence_verification = await audit_service.verify_chain(AuditStream.EVIDENCE)
+    security_verification = await audit_service.verify_chain(AuditStream.SECURITY)
+    ops_verification = await audit_service.verify_chain(AuditStream.OPS)
+
+    # Count audit log entries
+    security_log_count = 0
+    ops_log_count = 0
+
+    if request_body.include_security_logs:
+        security_records = await audit_service.get_records(stream=AuditStream.SECURITY, limit=10000)
+        # Filter by date range based on created_at
+        security_log_count = sum(1 for r in security_records if start_dt <= r.created_at <= end_dt)
+
+    if request_body.include_ops_logs:
+        ops_records = await audit_service.get_records(stream=AuditStream.OPS, limit=10000)
+        ops_log_count = sum(1 for r in ops_records if start_dt <= r.created_at <= end_dt)
+
+    # Count config snapshots in range
+    config_snapshot_count = 0
+    if request_body.include_config_snapshots:
+        snapshot_query = select(func.count()).select_from(
+            select(PolicySnapshot)
+            .where(PolicySnapshot.created_at >= start_dt)
+            .where(PolicySnapshot.created_at <= end_dt)
+            .subquery()
+        )
+        config_snapshot_count = (await db.execute(snapshot_query)).scalar_one()
+
+    # Generate pack metadata for hashing
+    pack_id = uuid.uuid4()
+    created_at = datetime.now(UTC)
+    pack_metadata = {
+        "pack_id": str(pack_id),
+        "start_date": request_body.start_date.isoformat(),
+        "end_date": request_body.end_date.isoformat(),
+        "created_at": created_at.isoformat(),
+        "created_by": str(user.principal_id),
+        "evidence_count": evidence_count,
+        "security_log_count": security_log_count,
+        "ops_log_count": ops_log_count,
+        "config_snapshot_count": config_snapshot_count,
+        "reason": request_body.reason,
+    }
+    pack_hash = hashlib.sha256(json.dumps(pack_metadata, sort_keys=True).encode()).hexdigest()
+
+    # In production, this would upload to object storage
+    storage_ref = f"audit-packs/{pack_id}/{request_body.start_date}_{request_body.end_date}.json"
+
+    await db.commit()
+
+    # Build verification errors list
+    verification_errors: list[str] = []
+    if not evidence_verification.valid:
+        verification_errors.extend(evidence_verification.errors)
+    if not security_verification.valid:
+        verification_errors.extend(security_verification.errors)
+    if not ops_verification.valid:
+        verification_errors.extend(ops_verification.errors)
+
+    return AuditPackResponse(
+        pack_id=pack_id,
+        start_date=request_body.start_date,
+        end_date=request_body.end_date,
+        created_at=created_at,
+        created_by=str(user.principal_id),
+        evidence_count=evidence_count,
+        security_log_count=security_log_count,
+        ops_log_count=ops_log_count,
+        config_snapshot_count=config_snapshot_count,
+        pack_hash=pack_hash,
+        storage_ref=storage_ref,
+        verification=AuditPackVerification(
+            evidence_chain_valid=evidence_verification.valid,
+            security_chain_valid=security_verification.valid,
+            ops_chain_valid=ops_verification.valid,
+            errors=verification_errors,
+        ),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Delivery Timeline / Dispute Reconstruction (REQ-H10)
+# -----------------------------------------------------------------------------
+
+
+@router.get(
+    "/deliveries/{delivery_id}/timeline",
+    response_model=DeliveryTimelineResponse,
+    summary="Get delivery timeline",
+    description="Retrieve complete timeline for dispute reconstruction with all evidence events.",
+)
+async def get_delivery_timeline(
+    delivery_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DeliveryTimelineResponse:
+    """Get complete timeline for a delivery for dispute reconstruction.
+
+    Retrieves all evidence events, policy snapshots, and content hashes
+    for comprehensive dispute analysis.
+
+    Args:
+        delivery_id: UUID of the delivery.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Complete delivery timeline with all events and metadata.
+
+    Raises:
+        HTTPException: If delivery not found.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="view_delivery_timeline",
+        target_type="delivery",
+        target_id=str(delivery_id),
+        details={"purpose": "dispute_reconstruction"},
+    )
+
+    # Get delivery with relationships
+    query = (
+        select(Delivery)
+        .where(Delivery.delivery_id == delivery_id)
+        .options(
+            selectinload(Delivery.content_objects),
+            selectinload(Delivery.evidence_events).selectinload(EvidenceEvent.evidence_objects),
+        )
+    )
+    result = await db.execute(query)
+    delivery = result.scalar_one_or_none()
+
+    if not delivery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Delivery {delivery_id} not found",
+        )
+
+    # Build timeline events
+    events: list[TimelineEventSummary] = []
+    policy_snapshot_ids: set[uuid.UUID] = set()
+
+    for event in sorted(delivery.evidence_events, key=lambda e: e.event_time):
+        evidence_object_ids = [eo.evidence_object_id for eo in event.evidence_objects]
+
+        if event.policy_snapshot_id:
+            policy_snapshot_ids.add(event.policy_snapshot_id)
+
+        events.append(
+            TimelineEventSummary(
+                event_id=event.event_id,
+                event_type=event.event_type.value,
+                event_time=event.event_time,
+                actor_type=event.actor_type.value,
+                actor_ref=event.actor_ref,
+                description=_get_event_description(event),
+                evidence_object_ids=evidence_object_ids,
+                metadata=event.event_metadata,
+            )
+        )
+
+    # Collect content hashes
+    content_hashes = [co.sha256 for co in delivery.content_objects]
+
+    await db.commit()
+
+    return DeliveryTimelineResponse(
+        delivery_id=delivery.delivery_id,
+        state=delivery.state.value,
+        sender_party_id=delivery.sender_party_id,
+        recipient_party_id=delivery.recipient_party_id,
+        jurisdiction_profile=delivery.jurisdiction_profile,
+        created_at=delivery.created_at,
+        events=events,
+        content_hashes=content_hashes,
+        policy_snapshots=list(policy_snapshot_ids),
+        generated_at=datetime.now(UTC),
+        generated_by=str(user.principal_id),
+    )
+
+
+def _get_event_description(event: EvidenceEvent) -> str:
+    """Generate human-readable description for an evidence event.
+
+    Args:
+        event: The evidence event.
+
+    Returns:
+        Human-readable description string.
+    """
+    descriptions = {
+        "evt_deposited": "Content deposited by sender",
+        "evt_notification_sent": "Notification sent to recipient",
+        "evt_notification_delivered": "Notification delivered to recipient",
+        "evt_notification_failed": "Notification delivery failed",
+        "evt_content_available": "Content made available for pickup",
+        "evt_content_accessed": "Content accessed by recipient",
+        "evt_content_downloaded": "Content downloaded by recipient",
+        "evt_accepted": "Delivery accepted by recipient",
+        "evt_refused": "Delivery refused by recipient",
+        "evt_received": "Delivery marked as received",
+        "evt_expired": "Delivery expired (acceptance deadline passed)",
+        "evt_retention_extended": "Retention period extended",
+        "evt_retention_deleted": "Data deleted per retention policy",
+    }
+    return descriptions.get(event.event_type.value, f"Event: {event.event_type.value}")
+
+
+# -----------------------------------------------------------------------------
+# Config Snapshots (REQ-H05)
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/config/snapshots",
+    response_model=ConfigSnapshotResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create config snapshot",
+    description="Create a versioned configuration snapshot. Changes are logged for audit.",
+)
+async def create_config_snapshot(
+    request_body: ConfigSnapshotRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> ConfigSnapshotResponse:
+    """Create a versioned configuration snapshot.
+
+    Captures the current configuration state with version identifier
+    and description of changes. Used for policy/config audit trail.
+
+    Args:
+        request_body: Config snapshot parameters.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Created config snapshot details.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_config_change(
+        actor=actor,
+        config_key="policy_snapshot",
+        new_value=request_body.version,
+        details={
+            "description": request_body.description,
+            "make_active": request_body.make_active,
+        },
+    )
+
+    # Compute snapshot hash
+    snapshot_data = {
+        "version": request_body.version,
+        "config_json": request_body.config_json,
+        "doc_refs": request_body.doc_refs,
+    }
+    snapshot_hash = hashlib.sha256(
+        json.dumps(snapshot_data, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+    # If making active, deactivate current active snapshot
+    if request_body.make_active:
+        await db.execute(
+            select(PolicySnapshot)
+            .where(PolicySnapshot.is_active.is_(True))
+            .execution_options(synchronize_session="fetch")
+        )
+        # Update in a separate query since we're using async
+        from sqlalchemy import update
+
+        await db.execute(
+            update(PolicySnapshot).where(PolicySnapshot.is_active.is_(True)).values(is_active=False)
+        )
+
+    # Create the snapshot
+    snapshot = PolicySnapshot(
+        created_by=str(user.principal_id),
+        version=request_body.version,
+        description=request_body.description,
+        config_json=request_body.config_json,
+        doc_refs=request_body.doc_refs,
+        snapshot_hash=snapshot_hash,
+        is_active=request_body.make_active,
+    )
+
+    db.add(snapshot)
+    await db.commit()
+    await db.refresh(snapshot)
+
+    logger.info(
+        "Config snapshot created",
+        extra={
+            "snapshot_id": str(snapshot.policy_snapshot_id),
+            "version": request_body.version,
+            "created_by": str(user.principal_id),
+        },
+    )
+
+    return ConfigSnapshotResponse(
+        policy_snapshot_id=snapshot.policy_snapshot_id,
+        version=snapshot.version,
+        description=snapshot.description,
+        created_at=snapshot.created_at,
+        created_by=str(user.principal_id),
+        snapshot_hash=snapshot.snapshot_hash or snapshot_hash,
+        is_active=snapshot.is_active,
+        doc_refs=snapshot.doc_refs,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Access Review Export (REQ-H06)
+# -----------------------------------------------------------------------------
+
+
+@router.get(
+    "/access-reviews/export",
+    response_model=AccessReviewExportResponse,
+    summary="Export RBAC bindings",
+    description="Export all role bindings with last-used timestamps for access review.",
+)
+async def export_access_reviews(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    inactive_days: Annotated[
+        int, Query(ge=1, le=365, description="Days of inactivity to flag")
+    ] = 90,
+) -> AccessReviewExportResponse:
+    """Export RBAC bindings for access review.
+
+    Generates a comprehensive export of all role bindings including
+    last-used timestamps to identify inactive accounts.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        inactive_days: Number of days without activity to flag as inactive.
+
+    Returns:
+        Complete role binding export for review.
+    """
+    from qerds.db.models.auth import RoleBinding
+
+    # Log the admin action (sensitive export)
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_sensitive_access(
+        actor=actor,
+        resource_type="rbac_bindings",
+        resource_id="all",
+        access_type="export",
+        purpose="access_review",
+    )
+
+    # Get all role bindings with related data
+    bindings_query = (
+        select(RoleBinding)
+        .options(
+            selectinload(RoleBinding.role),
+            selectinload(RoleBinding.admin_user),
+            selectinload(RoleBinding.api_client),
+        )
+        .order_by(RoleBinding.created_at)
+    )
+    result = await db.execute(bindings_query)
+    bindings = result.scalars().all()
+
+    # Build export records
+    binding_exports: list[RoleBindingExport] = []
+    user_ids: set[uuid.UUID] = set()
+    client_ids: set[uuid.UUID] = set()
+    inactive_threshold = datetime.now(UTC) - timedelta(days=inactive_days)
+
+    for binding in bindings:
+        if binding.admin_user_id:
+            user_ids.add(binding.admin_user_id)
+            principal_type = "admin_user"
+            principal_id = binding.admin_user_id
+            principal_name = binding.admin_user.username if binding.admin_user else "Unknown"
+            last_used = binding.admin_user.last_login_at if binding.admin_user else None
+        elif binding.api_client_id:
+            client_ids.add(binding.api_client_id)
+            principal_type = "api_client"
+            principal_id = binding.api_client_id
+            principal_name = binding.api_client.name if binding.api_client else "Unknown"
+            last_used = binding.api_client.last_used_at if binding.api_client else None
+        else:
+            continue  # Skip invalid bindings
+
+        binding_exports.append(
+            RoleBindingExport(
+                binding_id=binding.binding_id,
+                role_name=binding.role.name if binding.role else "Unknown",
+                role_permissions=binding.role.permissions if binding.role else [],
+                principal_type=principal_type,
+                principal_id=principal_id,
+                principal_name=principal_name,
+                granted_at=binding.created_at,
+                granted_by=binding.granted_by,
+                valid_from=binding.valid_from,
+                valid_until=binding.valid_until,
+                last_used_at=last_used,
+                scope_filter=binding.scope_filter,
+                reason=binding.reason,
+            )
+        )
+
+    # Find inactive users and clients
+    inactive_users: list[uuid.UUID] = []
+    inactive_clients: list[uuid.UUID] = []
+
+    for binding in bindings:
+        if binding.admin_user_id and binding.admin_user:
+            last_login = binding.admin_user.last_login_at
+            is_inactive = not last_login or last_login < inactive_threshold
+            if is_inactive and binding.admin_user_id not in inactive_users:
+                inactive_users.append(binding.admin_user_id)
+        elif binding.api_client_id and binding.api_client:
+            last_used = binding.api_client.last_used_at
+            is_inactive = not last_used or last_used < inactive_threshold
+            if is_inactive and binding.api_client_id not in inactive_clients:
+                inactive_clients.append(binding.api_client_id)
+
+    await db.commit()
+
+    return AccessReviewExportResponse(
+        exported_at=datetime.now(UTC),
+        exported_by=str(user.principal_id),
+        total_bindings=len(binding_exports),
+        total_users=len(user_ids),
+        total_clients=len(client_ids),
+        bindings=binding_exports,
+        inactive_users=inactive_users,
+        inactive_clients=inactive_clients,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Incident Management (REQ-H04)
+# -----------------------------------------------------------------------------
+
+# In-memory incident storage (in production, this would be a database table)
+# This is a stub implementation for the API structure
+_incidents: dict[uuid.UUID, dict[str, Any]] = {}
+
+
+@router.post(
+    "/incidents",
+    response_model=IncidentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create incident record",
+    description="Create a new incident record for tracking and investigation.",
+)
+async def create_incident(
+    request_body: CreateIncidentRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> IncidentResponse:
+    """Create a new incident record.
+
+    Creates an incident for tracking security events, outages,
+    or compliance issues. All incidents are logged to the audit trail.
+
+    Args:
+        request_body: Incident details.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Created incident record.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+
+    incident_id = uuid.uuid4()
+    created_at = datetime.now(UTC)
+
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="create_incident",
+        target_type="incident",
+        target_id=str(incident_id),
+        details={
+            "title": request_body.title,
+            "severity": request_body.severity,
+            "category": request_body.category,
+        },
+    )
+
+    # Store incident (in production, this would be a database insert)
+    incident_data = {
+        "incident_id": incident_id,
+        "title": request_body.title,
+        "severity": request_body.severity,
+        "category": request_body.category,
+        "status": "open",
+        "description": request_body.description,
+        "detected_at": request_body.detected_at,
+        "created_at": created_at,
+        "created_by": str(user.principal_id),
+        "affected_deliveries": request_body.affected_deliveries or [],
+        "resolved_at": None,
+        "timeline_events": [
+            {
+                "timestamp": created_at,
+                "event_type": "incident_created",
+                "actor": str(user.principal_id),
+                "description": "Incident record created",
+                "metadata": {"initial_assessment": request_body.initial_assessment},
+            }
+        ],
+    }
+    _incidents[incident_id] = incident_data
+
+    await db.commit()
+
+    logger.warning(
+        "Incident created: %s (severity: %s)",
+        request_body.title,
+        request_body.severity,
+        extra={
+            "incident_id": str(incident_id),
+            "severity": request_body.severity,
+            "category": request_body.category,
+        },
+    )
+
+    return IncidentResponse(
+        incident_id=incident_id,
+        title=request_body.title,
+        severity=request_body.severity,
+        category=request_body.category,
+        status="open",
+        description=request_body.description,
+        detected_at=request_body.detected_at,
+        created_at=created_at,
+        created_by=str(user.principal_id),
+        affected_deliveries=request_body.affected_deliveries or [],
+        resolved_at=None,
+    )
+
+
+@router.get(
+    "/incidents/{incident_id}/export",
+    response_model=IncidentExportResponse,
+    summary="Export incident timeline",
+    description="Export complete incident timeline bundle for review or compliance.",
+)
+async def export_incident(
+    incident_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> IncidentExportResponse:
+    """Export incident timeline bundle.
+
+    Generates a comprehensive export of the incident including
+    timeline events and affected delivery summaries.
+
+    Args:
+        incident_id: UUID of the incident.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Incident export with timeline and affected deliveries.
+
+    Raises:
+        HTTPException: If incident not found.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_sensitive_access(
+        actor=actor,
+        resource_type="incident",
+        resource_id=str(incident_id),
+        access_type="export",
+        purpose="incident_review",
+    )
+
+    # Get incident (in production, this would be a database query)
+    incident_data = _incidents.get(incident_id)
+    if not incident_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    # Get affected delivery summaries
+    affected_summaries: list[DeliveryIncidentSummary] = []
+    if incident_data.get("affected_deliveries"):
+        for del_id in incident_data["affected_deliveries"]:
+            delivery_query = select(Delivery).where(Delivery.delivery_id == del_id)
+            result = await db.execute(delivery_query)
+            delivery = result.scalar_one_or_none()
+            if delivery:
+                affected_summaries.append(
+                    DeliveryIncidentSummary(
+                        delivery_id=delivery.delivery_id,
+                        state=delivery.state.value,
+                        sender_party_id=delivery.sender_party_id,
+                        recipient_party_id=delivery.recipient_party_id,
+                        created_at=delivery.created_at,
+                    )
+                )
+
+    # Build timeline events
+    timeline_events = [
+        IncidentTimelineEvent(
+            timestamp=e["timestamp"],
+            event_type=e["event_type"],
+            actor=e["actor"],
+            description=e["description"],
+            metadata=e.get("metadata"),
+        )
+        for e in incident_data.get("timeline_events", [])
+    ]
+
+    # Compute export hash
+    export_data = {
+        "incident_id": str(incident_id),
+        "title": incident_data["title"],
+        "exported_at": datetime.now(UTC).isoformat(),
+        "exported_by": str(user.principal_id),
+    }
+    export_hash = hashlib.sha256(json.dumps(export_data, sort_keys=True).encode()).hexdigest()
+
+    await db.commit()
+
+    return IncidentExportResponse(
+        incident_id=incident_id,
+        title=incident_data["title"],
+        severity=incident_data["severity"],
+        category=incident_data["category"],
+        status=incident_data["status"],
+        description=incident_data["description"],
+        detected_at=incident_data["detected_at"],
+        created_at=incident_data["created_at"],
+        created_by=incident_data["created_by"],
+        resolved_at=incident_data.get("resolved_at"),
+        affected_deliveries=affected_summaries,
+        timeline_events=timeline_events,
+        exported_at=datetime.now(UTC),
+        exported_by=str(user.principal_id),
+        export_hash=export_hash,
+    )
+
+
+# -----------------------------------------------------------------------------
+# System Statistics
+# -----------------------------------------------------------------------------
+
+
+@router.get(
+    "/stats",
+    response_model=SystemStatsResponse,
+    summary="Get system statistics",
+    description="Get comprehensive system statistics for monitoring and reporting.",
+)
+async def get_system_stats(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> SystemStatsResponse:
+    """Get comprehensive system statistics.
+
+    Provides statistics on deliveries, evidence, users, and storage
+    for monitoring and reporting purposes.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        System statistics across all subsystems.
+    """
+    from qerds.db.models.auth import AdminUser as AdminUserModel
+    from qerds.db.models.auth import ApiClient
+    from qerds.db.models.parties import Party
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="view_system_stats",
+        target_type="system",
+        target_id="stats",
+    )
+
+    now = datetime.now(UTC)
+    today_start = datetime.combine(now.date(), datetime.min.time(), tzinfo=UTC)
+    week_start = today_start - timedelta(days=7)
+    month_start = today_start - timedelta(days=30)
+
+    # Delivery statistics
+    total_deliveries = (await db.execute(select(func.count()).select_from(Delivery))).scalar_one()
+
+    # Count by state
+    state_counts_query = select(Delivery.state, func.count(Delivery.delivery_id)).group_by(
+        Delivery.state
+    )
+    state_results = await db.execute(state_counts_query)
+    by_state = {row[0].value: row[1] for row in state_results.all()}
+
+    # Count by jurisdiction
+    jurisdiction_counts_query = select(
+        Delivery.jurisdiction_profile, func.count(Delivery.delivery_id)
+    ).group_by(Delivery.jurisdiction_profile)
+    jurisdiction_results = await db.execute(jurisdiction_counts_query)
+    by_jurisdiction = {row[0]: row[1] for row in jurisdiction_results.all()}
+
+    # Time-based counts
+    created_today = (
+        await db.execute(
+            select(func.count()).select_from(Delivery).where(Delivery.created_at >= today_start)
+        )
+    ).scalar_one()
+
+    created_this_week = (
+        await db.execute(
+            select(func.count()).select_from(Delivery).where(Delivery.created_at >= week_start)
+        )
+    ).scalar_one()
+
+    created_this_month = (
+        await db.execute(
+            select(func.count()).select_from(Delivery).where(Delivery.created_at >= month_start)
+        )
+    ).scalar_one()
+
+    # Evidence statistics
+    total_evidence_events = (
+        await db.execute(select(func.count()).select_from(EvidenceEvent))
+    ).scalar_one()
+
+    total_evidence_objects = (
+        await db.execute(select(func.count()).select_from(EvidenceObject))
+    ).scalar_one()
+
+    qualified_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(EvidenceObject)
+            .where(EvidenceObject.qualification_label == QualificationLabel.QUALIFIED)
+        )
+    ).scalar_one()
+
+    non_qualified_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(EvidenceObject)
+            .where(EvidenceObject.qualification_label == QualificationLabel.NON_QUALIFIED)
+        )
+    ).scalar_one()
+
+    event_type_counts_query = select(
+        EvidenceEvent.event_type, func.count(EvidenceEvent.event_id)
+    ).group_by(EvidenceEvent.event_type)
+    event_type_results = await db.execute(event_type_counts_query)
+    by_event_type = {row[0].value: row[1] for row in event_type_results.all()}
+
+    # User statistics
+    total_admin_users = (
+        await db.execute(select(func.count()).select_from(AdminUserModel))
+    ).scalar_one()
+
+    active_admin_users = (
+        await db.execute(
+            select(func.count())
+            .select_from(AdminUserModel)
+            .where(AdminUserModel.is_active.is_(True))
+        )
+    ).scalar_one()
+
+    total_api_clients = (await db.execute(select(func.count()).select_from(ApiClient))).scalar_one()
+
+    active_api_clients = (
+        await db.execute(
+            select(func.count()).select_from(ApiClient).where(ApiClient.is_active.is_(True))
+        )
+    ).scalar_one()
+
+    total_parties = (await db.execute(select(func.count()).select_from(Party))).scalar_one()
+
+    # Storage statistics
+    total_content_objects = (
+        await db.execute(select(func.count()).select_from(ContentObject))
+    ).scalar_one()
+
+    total_content_size = (
+        await db.execute(select(func.coalesce(func.sum(ContentObject.size_bytes), 0)))
+    ).scalar_one()
+
+    # Audit log record count
+    from qerds.db.models.audit import AuditLogRecord
+
+    audit_log_count = (
+        await db.execute(select(func.count()).select_from(AuditLogRecord))
+    ).scalar_one()
+
+    await db.commit()
+
+    return SystemStatsResponse(
+        generated_at=now,
+        delivery_stats=DeliveryStats(
+            total_deliveries=total_deliveries,
+            by_state=by_state,
+            by_jurisdiction=by_jurisdiction,
+            created_today=created_today,
+            created_this_week=created_this_week,
+            created_this_month=created_this_month,
+            average_time_to_accept_hours=None,  # Would require more complex query
+        ),
+        evidence_stats=EvidenceStats(
+            total_evidence_events=total_evidence_events,
+            total_evidence_objects=total_evidence_objects,
+            qualified_count=qualified_count,
+            non_qualified_count=non_qualified_count,
+            by_event_type=by_event_type,
+        ),
+        user_stats=UserStats(
+            total_admin_users=total_admin_users,
+            active_admin_users=active_admin_users,
+            total_api_clients=total_api_clients,
+            active_api_clients=active_api_clients,
+            total_parties=total_parties,
+        ),
+        storage_stats=StorageStats(
+            total_content_objects=total_content_objects,
+            total_content_size_bytes=total_content_size,
+            total_evidence_blobs=total_evidence_objects,  # Approximation
+            audit_log_record_count=audit_log_count,
+        ),
+    )
