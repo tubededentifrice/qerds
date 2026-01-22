@@ -71,6 +71,46 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "error.not_found": "Page non trouvee",
         "error.unauthorized": "Acces non autorise",
         "error.server": "Erreur serveur",
+        # Email notifications
+        "email.subject.notification": "Lettre recommandee electronique",
+        "email.subject.reminder": "Rappel - Lettre recommandee en attente",
+        "email.greeting": "Bonjour,",
+        "email.notification.intro": (
+            "Vous avez recu une lettre recommandee electronique qui attend votre action."
+        ),
+        "email.reminder.intro": (
+            "Nous vous rappelons qu'une lettre recommandee electronique est en attente "
+            "de votre action. La date limite approche."
+        ),
+        "email.delivery_info": "Informations de l'envoi",
+        "email.reference": "Reference",
+        "email.provider": "Operateur",
+        "email.nature": "Nature",
+        "email.nature_lre": "Lettre Recommandee Electronique (LRE)",
+        "email.deadline_label": "Date limite pour accepter ou refuser",
+        "email.days_remaining": "{days} jour(s) restant(s)",
+        "email.action_button": "Consulter ma lettre recommandee",
+        "email.action_button_reminder": "Agir maintenant",
+        "email.auth_required": "Une authentification sera requise pour acceder au contenu.",
+        "email.privacy_notice_title": "Note de confidentialite",
+        "email.privacy_notice": (
+            "Conformement a la reglementation, l'identite de l'expediteur et le contenu "
+            "de l'envoi ne sont pas reveles dans cette notification. Ces informations "
+            "seront accessibles apres votre authentification sur la plateforme securisee."
+        ),
+        "email.expiry_warning_title": "Important : que se passe-t-il si je n'agis pas ?",
+        "email.expiry_warning": (
+            "Si vous n'acceptez ni ne refusez cette lettre avant la date limite, "
+            "elle sera consideree comme 'negligee' conformement a la loi. "
+            "L'expediteur sera informe que vous n'avez pas retire l'envoi."
+        ),
+        "email.footer.auto_message": (
+            "Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre."
+        ),
+        "email.legal_nature.lre": (
+            "Lettre Recommandee Electronique (LRE) au sens de l'article L.100 "
+            "du Code des Postes et des Communications Electroniques"
+        ),
     },
     "en": {
         # Common
@@ -115,6 +155,43 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "error.not_found": "Page not found",
         "error.unauthorized": "Unauthorized",
         "error.server": "Server error",
+        # Email notifications
+        "email.subject.notification": "Electronic registered delivery",
+        "email.subject.reminder": "Reminder - Pending registered delivery",
+        "email.greeting": "Hello,",
+        "email.notification.intro": (
+            "You have received an electronic registered delivery awaiting your action."
+        ),
+        "email.reminder.intro": (
+            "This is a reminder that an electronic registered delivery is awaiting "
+            "your action. The deadline is approaching."
+        ),
+        "email.delivery_info": "Delivery Information",
+        "email.reference": "Reference",
+        "email.provider": "Provider",
+        "email.nature": "Type",
+        "email.nature_lre": "Qualified Electronic Registered Delivery",
+        "email.deadline_label": "Deadline to accept or refuse",
+        "email.days_remaining": "{days} day(s) remaining",
+        "email.action_button": "View my registered delivery",
+        "email.action_button_reminder": "Take action now",
+        "email.auth_required": "Authentication will be required to access the content.",
+        "email.privacy_notice_title": "Privacy Notice",
+        "email.privacy_notice": (
+            "In accordance with regulations, the sender's identity and delivery content "
+            "are not disclosed in this notification. This information will be accessible "
+            "after you authenticate on the secure platform."
+        ),
+        "email.expiry_warning_title": "Important: What happens if I don't act?",
+        "email.expiry_warning": (
+            "If you neither accept nor refuse this delivery before the deadline, "
+            "it will be marked as 'expired' in accordance with the law. "
+            "The sender will be notified that you did not collect the delivery."
+        ),
+        "email.footer.auto_message": "This email was sent automatically. Please do not reply.",
+        "email.legal_nature.lre": (
+            "Qualified Electronic Registered Delivery (QERDS) under EU Regulation 910/2014 (eIDAS)"
+        ),
     },
 }
 
