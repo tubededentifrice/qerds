@@ -362,6 +362,90 @@ class PDFGenerator:
                 cause=e,
             ) from e
 
+    def generate_acceptance_proof(
+        self,
+        evidence_data: dict[str, Any],
+    ) -> PDFResult:
+        """Generate a Preuve d'Acceptation (Proof of Acceptance) PDF.
+
+        This method generates a proof of acceptance document for when a recipient
+        accepts a registered electronic delivery. It is triggered by the EVT_ACCEPTED
+        event and includes all required CPCE/LRE information.
+
+        The generated PDF includes:
+        - Delivery reference and timestamps
+        - Sender identity and address
+        - Recipient identity (revealed post-acceptance per CPCE)
+        - Content hash/digest
+        - Provider electronic seal
+        - Timestamp authority information
+        - Verification instructions
+
+        Args:
+            evidence_data: Dictionary containing acceptance evidence data.
+                Required keys:
+                    - delivery_id: Unique delivery identifier
+                    - acceptance_timestamp: ISO 8601 timestamp of acceptance
+                Optional keys:
+                    - deposit_timestamp: ISO 8601 timestamp of deposit
+                    - sender_name: Sender's name
+                    - sender_email: Sender's email address
+                    - sender_organization: Sender's organization
+                    - sender_address: Sender's postal address
+                    - recipient_name: Recipient's name
+                    - recipient_email: Recipient's email address
+                    - recipient_organization: Recipient's organization
+                    - recipient_address: Recipient's postal address
+                    - content_info: Dict with subject, document_count, total_size
+                    - content_hash: SHA-256 hash of content
+                    - hash_algorithm: Algorithm used for content hash (default: SHA-256)
+                    - seal_id: Provider seal identifier
+                    - signature_algorithm: Signature algorithm (default: Ed25519)
+                    - provider_name: Provider name (default: QERDS)
+                    - timestamp_authority: Dict with name, policy_oid, serial_number
+                    - proof_id: Unique proof identifier
+                    - verification_url: URL for verification
+
+        Returns:
+            PDFResult containing the generated PDF bytes and metadata.
+
+        Raises:
+            PDFGenerationError: If PDF generation fails.
+
+        Example:
+            >>> generator = PDFGenerator()
+            >>> result = generator.generate_acceptance_proof({
+            ...     "delivery_id": "del-abc123",
+            ...     "acceptance_timestamp": "2026-01-22T14:30:00Z",
+            ...     "sender_name": "Jean Dupont",
+            ...     "recipient_name": "Marie Martin",
+            ...     "content_hash": "e3b0c44...",
+            ... })
+            >>> result.content.startswith(b"%PDF")
+            True
+        """
+        # Validate required fields
+        if "delivery_id" not in evidence_data:
+            raise PDFGenerationError(
+                "Missing required field: delivery_id",
+                template_name="proof_acceptance.html",
+            )
+        if "acceptance_timestamp" not in evidence_data:
+            raise PDFGenerationError(
+                "Missing required field: acceptance_timestamp",
+                template_name="proof_acceptance.html",
+            )
+
+        logger.info(
+            "Generating acceptance proof PDF for delivery_id=%s",
+            evidence_data.get("delivery_id"),
+        )
+
+        return self.render_proof(
+            template_name="proof_acceptance.html",
+            context=evidence_data,
+        )
+
     def get_available_templates(self) -> list[str]:
         """List available PDF templates.
 
