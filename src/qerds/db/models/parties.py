@@ -5,9 +5,8 @@ Covers: REQ-B05 (sender proofing), REQ-E03 (redaction), REQ-F06 (consents)
 
 from __future__ import annotations
 
-# Required at runtime for SQLAlchemy type resolution (noqa: TC003 for both)
+# Required at runtime for SQLAlchemy type resolution
 import uuid  # noqa: TC003
-from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Index, String, Text
@@ -16,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from qerds.db.models.base import (
     Base,
+    ConsentState,
     ConsentType,
     IALLevel,
     OptionalTimestampTZ,
@@ -150,11 +150,22 @@ class RecipientConsent(Base):
 
     Tracks CPCE-required consent for consumer recipients
     to receive electronic registered deliveries.
+
+    Consent lifecycle:
+    - PENDING: Initial state, no consent recorded
+    - GRANTED: Consent given by the recipient
+    - WITHDRAWN: Consent revoked (with audit trail)
+
+    Each consent record represents a specific consent type for a recipient.
+    The state tracks the current status, while timestamps and metadata
+    provide the full audit trail required for compliance.
     """
 
     __tablename__ = "recipient_consents"
 
     consent_id: Mapped[UUIDPrimaryKey]
+    created_at: Mapped[TimestampTZ]
+    updated_at: Mapped[TimestampTZ]
 
     recipient_party_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -162,15 +173,21 @@ class RecipientConsent(Base):
         nullable=False,
     )
 
-    # Type of consent given
+    # Type of consent (jurisdiction-specific)
     consent_type: Mapped[ConsentType] = mapped_column(
         Enum(ConsentType, name="consent_type", create_constraint=True),
         nullable=False,
     )
 
-    consented_at: Mapped[datetime] = mapped_column(
+    # Current consent state
+    state: Mapped[ConsentState] = mapped_column(
+        Enum(ConsentState, name="consent_state", create_constraint=True),
         nullable=False,
+        default=ConsentState.PENDING,
     )
+
+    # When consent was granted (NULL if never granted)
+    consented_at: Mapped[OptionalTimestampTZ]
 
     # Who gave consent (party_id of the consenting user, may differ from recipient)
     consented_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -178,17 +195,29 @@ class RecipientConsent(Base):
         nullable=True,
     )
 
+    # IP address and user agent for audit trail
+    consent_ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    consent_user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Reference to consent evidence in object store
     consent_evidence_object_ref: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
     )
 
-    # Consent may be revoked
-    revoked_at: Mapped[OptionalTimestampTZ]
-    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Withdrawal tracking
+    withdrawn_at: Mapped[OptionalTimestampTZ]
+    withdrawal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    withdrawal_ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    withdrawal_user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    # Jurisdiction-specific consent metadata
+    # Reference to withdrawal evidence in object store
+    withdrawal_evidence_object_ref: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    # Jurisdiction-specific consent metadata (e.g., consent text version, legal basis)
     consent_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Relationship
@@ -197,4 +226,12 @@ class RecipientConsent(Base):
     __table_args__ = (
         Index("ix_recipient_consents_party_id", "recipient_party_id"),
         Index("ix_recipient_consents_type", "consent_type"),
+        Index("ix_recipient_consents_state", "state"),
+        # Unique constraint: one consent record per party and consent type
+        Index(
+            "uq_recipient_consents_party_type",
+            "recipient_party_id",
+            "consent_type",
+            unique=True,
+        ),
     )

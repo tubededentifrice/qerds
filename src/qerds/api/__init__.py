@@ -26,6 +26,7 @@ from qerds.api.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
 from qerds.api.routers import (
     admin_router,
     auth_router,
+    consent_router,
     pickup_router,
     recipient_router,
     sender_router,
@@ -52,6 +53,7 @@ Qualified Electronic Registered Delivery Service API.
 - **/pickup/** - Recipient pickup portal with auth wall (REQ-E02, REQ-F03)
 - **/sender/** - Sender operations (authenticated)
 - **/recipient/** - Recipient portal API (authenticated)
+- **/consent/** - Consumer consent management (REQ-F06)
 - **/verify/** - Third-party verification (token-gated)
 - **/admin/** - Operational/admin endpoints (admin auth)
 
@@ -203,5 +205,6 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(pickup_router)
     app.include_router(sender_router)
     app.include_router(recipient_router)
+    app.include_router(consent_router)
     app.include_router(verify_router)
     app.include_router(admin_router)

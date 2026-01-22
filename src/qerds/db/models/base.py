@@ -160,6 +160,20 @@ class ConsentType(enum.Enum):
     EIDAS_ELECTRONIC_DELIVERY = "eidas_electronic_delivery"
 
 
+class ConsentState(enum.Enum):
+    """Consent lifecycle states per CPCE requirements (REQ-F06).
+
+    Values:
+        PENDING: No consent recorded (initial state for new recipients)
+        GRANTED: Consent given by the recipient
+        WITHDRAWN: Consent revoked by the recipient
+    """
+
+    PENDING = "pending"
+    GRANTED = "granted"
+    WITHDRAWN = "withdrawn"
+
+
 class EncryptionScheme(enum.Enum):
     """Content encryption schemes.
 
