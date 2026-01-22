@@ -22,9 +22,12 @@ from qerds.api.routers.trust import (
 )
 from qerds.services.trust import (
     AlgorithmSuite,
+    DualControlRequiredError,
+    DualControlSameUserError,
     KeyNotFoundError,
     KeyPurpose,
     KeyStatus,
+    KeyStatusError,
     QualificationMode,
     QualifiedModeNotImplementedError,
     TrustService,
@@ -677,16 +680,17 @@ class TestTrustAPI:
         response = await trust_api_client.get("/trust/keys/nonexistent-key")
         assert response.status_code == 404
 
-    async def test_rotate_key_not_implemented(self, trust_api_client):
-        """Test key rotation returns 501 (not implemented)."""
+    async def test_rotate_key_requires_performed_by(self, trust_api_client):
+        """Test key rotation requires performed_by field."""
         keys_response = await trust_api_client.get("/trust/keys")
         key_id = keys_response.json()["keys"][0]["key_id"]
 
+        # Missing performed_by should return 422
         response = await trust_api_client.post(
             f"/trust/keys/{key_id}/rotate",
             json={"reason": "Scheduled rotation for security compliance"},
         )
-        assert response.status_code == 501
+        assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -810,3 +814,587 @@ class TestCertificates:
 
             # Should be valid for 2 years (730 days)
             assert validity_days == 730
+
+
+# ---------------------------------------------------------------------------
+# Key Lifecycle Tests (REQ-H07)
+# ---------------------------------------------------------------------------
+
+
+class TestKeyLifecycle:
+    """Tests for key lifecycle management per REQ-H07."""
+
+    async def test_generate_key_with_auto_activate(self, trust_service):
+        """Test generating a key with auto-activation."""
+        key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test key generation",
+            auto_activate=True,
+        )
+
+        assert key_info.key_id is not None
+        assert key_info.purpose == KeyPurpose.KEK
+        assert key_info.status == KeyStatus.ACTIVE
+        assert key_info.qualification_mode == QualificationMode.NON_QUALIFIED
+
+        # Verify ceremony log
+        assert ceremony.ceremony_id.startswith("ceremony-")
+        assert ceremony.event.action.value == "generate"
+        assert ceremony.event.performed_by == "test-user"
+        assert ceremony.event.new_status == KeyStatus.ACTIVE
+
+    async def test_generate_key_pending_activation(self, trust_service):
+        """Test generating a key without auto-activation."""
+        key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.AUDIT_LOG_CHAIN,
+            performed_by="test-user",
+            reason="Test pending key",
+            auto_activate=False,
+        )
+
+        assert key_info.status == KeyStatus.PENDING_ACTIVATION
+        assert ceremony.event.new_status == KeyStatus.PENDING_ACTIVATION
+
+    async def test_activate_pending_key(self, trust_service):
+        """Test activating a pending key."""
+        # Generate key without auto-activation
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=False,
+        )
+
+        assert key_info.status == KeyStatus.PENDING_ACTIVATION
+
+        # Activate the key
+        activated_info, ceremony = await trust_service.activate_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Activating for use",
+        )
+
+        assert activated_info.status == KeyStatus.ACTIVE
+        assert ceremony.event.action.value == "activate"
+        assert ceremony.event.previous_status == KeyStatus.PENDING_ACTIVATION
+        assert ceremony.event.new_status == KeyStatus.ACTIVE
+
+    async def test_activate_non_pending_key_fails(self, trust_service):
+        """Test that activating an already active key fails."""
+        keys = await trust_service.get_keys()
+        active_key = next(k for k in keys if k.status == KeyStatus.ACTIVE)
+
+        with pytest.raises(KeyStatusError) as exc_info:
+            await trust_service.activate_key(
+                active_key.key_id,
+                performed_by="test-user",
+                reason="Test",
+            )
+
+        assert active_key.key_id in str(exc_info.value)
+        assert "activate" in str(exc_info.value)
+
+    async def test_rotate_key(self, trust_service):
+        """Test key rotation."""
+        keys = await trust_service.get_keys()
+        signing_key = next(k for k in keys if k.purpose == KeyPurpose.SIGNING)
+
+        old_key, new_key, ceremony = await trust_service.rotate_key(
+            signing_key.key_id,
+            performed_by="test-user",
+            reason="Scheduled rotation for security compliance",
+        )
+
+        # Old key should be retired
+        assert old_key.key_id == signing_key.key_id
+        assert old_key.status == KeyStatus.RETIRED
+
+        # New key should be active with same purpose
+        assert new_key.key_id != signing_key.key_id
+        assert new_key.status == KeyStatus.ACTIVE
+        assert new_key.purpose == KeyPurpose.SIGNING
+
+        # Ceremony should document rotation
+        assert ceremony.event.action.value == "rotate"
+        assert ceremony.event.key_id == signing_key.key_id
+        assert "new_key_id" in ceremony.event.metadata
+
+    async def test_rotate_inactive_key_fails(self, trust_service):
+        """Test that rotating a non-active key fails."""
+        # Generate pending key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=False,
+        )
+
+        with pytest.raises(KeyStatusError):
+            await trust_service.rotate_key(
+                key_info.key_id,
+                performed_by="test-user",
+                reason="Should fail",
+            )
+
+    async def test_suspend_key(self, trust_service):
+        """Test suspending a key."""
+        # Generate and activate a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # Suspend the key
+        suspended_info, ceremony = await trust_service.suspend_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Security incident investigation",
+        )
+
+        assert suspended_info.status == KeyStatus.SUSPENDED
+        assert ceremony.event.action.value == "suspend"
+        assert ceremony.event.previous_status == KeyStatus.ACTIVE
+
+    async def test_unsuspend_key(self, trust_service):
+        """Test unsuspending a suspended key."""
+        # Generate and activate a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # Suspend the key
+        await trust_service.suspend_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Investigation",
+        )
+
+        # Unsuspend the key
+        unsuspended_info, ceremony = await trust_service.unsuspend_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Investigation complete, all clear",
+        )
+
+        assert unsuspended_info.status == KeyStatus.ACTIVE
+        assert ceremony.event.action.value == "unsuspend"
+
+    async def test_revoke_key(self, trust_service):
+        """Test revoking a key."""
+        # Generate a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # Revoke the key
+        revoked_info, ceremony = await trust_service.revoke_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Key compromise suspected",
+        )
+
+        assert revoked_info.status == KeyStatus.REVOKED
+        assert ceremony.event.action.value == "revoke"
+
+    async def test_revoke_already_revoked_fails(self, trust_service):
+        """Test that revoking an already revoked key fails."""
+        # Generate and revoke a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        await trust_service.revoke_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="First revocation",
+        )
+
+        # Try to revoke again
+        with pytest.raises(KeyStatusError):
+            await trust_service.revoke_key(
+                key_info.key_id,
+                performed_by="test-user",
+                reason="Should fail",
+            )
+
+    async def test_retire_key(self, trust_service):
+        """Test retiring a key."""
+        # Generate a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # Retire the key
+        retired_info, ceremony = await trust_service.retire_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Scheduled decommissioning",
+        )
+
+        assert retired_info.status == KeyStatus.RETIRED
+        assert ceremony.event.action.value == "retire"
+
+    async def test_get_lifecycle_events(self, trust_service):
+        """Test retrieving lifecycle events for a key."""
+        # Generate a key with some lifecycle events
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # Suspend and unsuspend
+        await trust_service.suspend_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Test suspension",
+        )
+        await trust_service.unsuspend_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Test unsuspension",
+        )
+
+        # Get lifecycle events
+        events = await trust_service.get_lifecycle_events(key_id=key_info.key_id)
+
+        assert len(events) == 3  # generate, suspend, unsuspend
+        # Events should be sorted newest first
+        assert events[0].event.action.value == "unsuspend"
+        assert events[1].event.action.value == "suspend"
+        assert events[2].event.action.value == "generate"
+
+
+# ---------------------------------------------------------------------------
+# Key Inventory Tests
+# ---------------------------------------------------------------------------
+
+
+class TestKeyInventory:
+    """Tests for key inventory functionality."""
+
+    async def test_get_key_inventory(self, trust_service):
+        """Test getting key inventory snapshot."""
+        inventory = await trust_service.get_key_inventory()
+
+        assert inventory.snapshot_id.startswith("inv-")
+        assert inventory.qualification_mode == QualificationMode.NON_QUALIFIED
+        assert inventory.total_keys >= 2  # At least signing and timestamping
+        assert inventory.active_keys >= 2
+
+    async def test_key_inventory_counts(self, trust_service):
+        """Test that inventory counts are accurate."""
+        # Generate a pending key
+        await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=False,
+        )
+
+        # Generate and retire a key
+        key_info, _ = await trust_service.generate_key(
+            purpose=KeyPurpose.AUDIT_LOG_CHAIN,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+        await trust_service.retire_key(
+            key_info.key_id,
+            performed_by="test-user",
+            reason="Retirement test",
+        )
+
+        inventory = await trust_service.get_key_inventory()
+
+        assert inventory.pending_keys >= 1
+        assert inventory.retired_keys >= 1
+        assert inventory.total_keys == len(inventory.keys)
+
+    async def test_inventory_to_dict(self, trust_service):
+        """Test inventory serialization."""
+        inventory = await trust_service.get_key_inventory()
+        data = inventory.to_dict()
+
+        assert "snapshot_id" in data
+        assert "snapshot_at" in data
+        assert "keys" in data
+        assert "total_keys" in data
+        assert "active_keys" in data
+
+
+# ---------------------------------------------------------------------------
+# Dual-Control Tests
+# ---------------------------------------------------------------------------
+
+
+class TestDualControl:
+    """Tests for dual-control enforcement."""
+
+    async def test_dual_control_required_for_rotate(self, temp_key_dir):
+        """Test that rotation requires dual-control when enabled."""
+        config = TrustServiceConfig(
+            mode=QualificationMode.NON_QUALIFIED,
+            key_storage_path=temp_key_dir,
+            require_dual_control=True,
+        )
+        service = TrustService(config)
+        await service.initialize()
+
+        keys = await service.get_keys()
+        signing_key = next(k for k in keys if k.purpose == KeyPurpose.SIGNING)
+
+        # Without approved_by should fail
+        with pytest.raises(DualControlRequiredError):
+            await service.rotate_key(
+                signing_key.key_id,
+                performed_by="user-1",
+                reason="Test rotation",
+            )
+
+    async def test_dual_control_same_user_fails(self, temp_key_dir):
+        """Test that same user cannot be both performer and approver."""
+        config = TrustServiceConfig(
+            mode=QualificationMode.NON_QUALIFIED,
+            key_storage_path=temp_key_dir,
+            require_dual_control=True,
+        )
+        service = TrustService(config)
+        await service.initialize()
+
+        keys = await service.get_keys()
+        signing_key = next(k for k in keys if k.purpose == KeyPurpose.SIGNING)
+
+        with pytest.raises(DualControlSameUserError):
+            await service.rotate_key(
+                signing_key.key_id,
+                performed_by="user-1",
+                approved_by="user-1",  # Same user!
+                reason="Test rotation",
+            )
+
+    async def test_dual_control_with_different_approver(self, temp_key_dir):
+        """Test that rotation succeeds with different approver."""
+        config = TrustServiceConfig(
+            mode=QualificationMode.NON_QUALIFIED,
+            key_storage_path=temp_key_dir,
+            require_dual_control=True,
+        )
+        service = TrustService(config)
+        await service.initialize()
+
+        keys = await service.get_keys()
+        signing_key = next(k for k in keys if k.purpose == KeyPurpose.SIGNING)
+
+        # With different approved_by should succeed
+        _old_key, new_key, ceremony = await service.rotate_key(
+            signing_key.key_id,
+            performed_by="user-1",
+            approved_by="user-2",  # Different user
+            reason="Test rotation",
+        )
+
+        assert new_key.status == KeyStatus.ACTIVE
+        assert ceremony.event.approved_by == "user-2"
+        assert "user-1" in ceremony.witnesses
+        assert "user-2" in ceremony.witnesses
+
+
+# ---------------------------------------------------------------------------
+# Ceremony Log Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCeremonyLogs:
+    """Tests for ceremony log generation."""
+
+    async def test_ceremony_log_structure(self, trust_service):
+        """Test ceremony log has required fields."""
+        _key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test key generation",
+            auto_activate=True,
+        )
+
+        assert ceremony.ceremony_id is not None
+        assert ceremony.event is not None
+        assert ceremony.key_info is not None
+        assert ceremony.algorithm_suite is not None
+        assert ceremony.policy_snapshot_id is not None
+        assert ceremony.witnesses is not None
+        assert ceremony.sealed_at is not None
+        assert ceremony.seal_signature is not None
+
+    async def test_ceremony_log_seal_signature(self, trust_service):
+        """Test that ceremony logs have seal signatures."""
+        _key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        # After signing key is active, seal signature should be real
+        assert ceremony.seal_signature != ""
+        # First ceremony during generation may have pending signature
+        # because signing key wasn't active yet
+
+    async def test_ceremony_log_to_dict(self, trust_service):
+        """Test ceremony log serialization."""
+        _key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        data = ceremony.to_dict()
+
+        assert "ceremony_id" in data
+        assert "event" in data
+        assert "key_info" in data
+        assert "algorithm_suite" in data
+        assert "policy_snapshot_id" in data
+        assert "witnesses" in data
+        assert "sealed_at" in data
+        assert "seal_signature" in data
+
+    async def test_ceremony_witnesses(self, trust_service):
+        """Test that ceremony witnesses are recorded."""
+        _key_info, ceremony = await trust_service.generate_key(
+            purpose=KeyPurpose.KEK,
+            performed_by="test-user",
+            reason="Test",
+            auto_activate=True,
+        )
+
+        assert "test-user" in ceremony.witnesses
+
+
+# ---------------------------------------------------------------------------
+# Key Lifecycle API Tests
+# ---------------------------------------------------------------------------
+
+
+class TestKeyLifecycleAPI:
+    """Tests for key lifecycle API endpoints."""
+
+    async def test_generate_key_endpoint(self, trust_api_client):
+        """Test key generation API endpoint."""
+        response = await trust_api_client.post(
+            "/trust/keys/generate",
+            json={
+                "purpose": "kek",
+                "performed_by": "test-user",
+                "reason": "API test generation",
+                "auto_activate": True,
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "key" in data
+        assert "ceremony" in data
+        assert data["key"]["purpose"] == "kek"
+        assert data["key"]["status"] == "active"
+
+    async def test_rotate_key_endpoint(self, trust_api_client):
+        """Test key rotation API endpoint."""
+        # First get an existing key
+        keys_response = await trust_api_client.get("/trust/keys")
+        key_id = keys_response.json()["keys"][0]["key_id"]
+
+        response = await trust_api_client.post(
+            f"/trust/keys/{key_id}/rotate",
+            json={
+                "performed_by": "test-user",
+                "reason": "API test rotation for compliance",
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "old_key" in data
+        assert "new_key" in data
+        assert "ceremony" in data
+        assert data["old_key"]["status"] == "retired"
+        assert data["new_key"]["status"] == "active"
+
+    async def test_suspend_key_endpoint(self, trust_api_client):
+        """Test key suspension API endpoint."""
+        # Generate a key first
+        gen_response = await trust_api_client.post(
+            "/trust/keys/generate",
+            json={
+                "purpose": "kek",
+                "performed_by": "test-user",
+                "reason": "Test key generation",
+                "auto_activate": True,
+            },
+        )
+        assert gen_response.status_code == 200, gen_response.json()
+        key_id = gen_response.json()["key"]["key_id"]
+
+        # Suspend it
+        response = await trust_api_client.post(
+            f"/trust/keys/{key_id}/suspend",
+            json={
+                "performed_by": "test-user",
+                "reason": "Security investigation required",
+            },
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["key"]["status"] == "suspended"
+
+    async def test_inventory_endpoint(self, trust_api_client):
+        """Test key inventory API endpoint."""
+        response = await trust_api_client.get("/trust/keys/inventory")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "snapshot_id" in data
+        assert "total_keys" in data
+        assert "active_keys" in data
+        assert "keys" in data
+
+    async def test_ceremonies_endpoint(self, trust_api_client):
+        """Test ceremonies API endpoint."""
+        # Generate a key with ceremonies
+        gen_response = await trust_api_client.post(
+            "/trust/keys/generate",
+            json={
+                "purpose": "kek",
+                "performed_by": "test-user",
+                "reason": "Test key generation",
+                "auto_activate": True,
+            },
+        )
+        assert gen_response.status_code == 200, gen_response.json()
+        key_id = gen_response.json()["key"]["key_id"]
+
+        # Get ceremonies
+        response = await trust_api_client.get(f"/trust/keys/{key_id}/ceremonies")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data) >= 1
+        assert data[0]["event"]["action"] == "generate"
