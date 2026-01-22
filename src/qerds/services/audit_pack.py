@@ -1,6 +1,6 @@
 """Audit pack generation service.
 
-Covers: REQ-H01 (audit pack export for conformity assessment)
+Covers: REQ-H01 (audit pack export for conformity assessment), REQ-D09, REQ-H08 (DR evidence)
 
 This module provides the audit pack generation functionality for regulatory
 review and conformity assessment. Per REQ-H01, audit packs must contain:
@@ -12,6 +12,7 @@ review and conformity assessment. Per REQ-H01, audit packs must contain:
 - Key inventory metadata and key lifecycle ceremony logs (not private keys)
 - Policy/CPS documents referenced by the platform
 - SBOM and release build metadata reference
+- Backup/restore/DR exercise reports and logs (REQ-H08, REQ-D09)
 
 Audit packs MUST be:
 - Immutable once generated (sealed/timestamped)
@@ -51,6 +52,7 @@ class AuditPackContents:
         key_inventory: Key metadata (no private material).
         policy_refs: References to policy documents.
         release_metadata: Release/SBOM information.
+        dr_evidence: DR/backup exercise evidence (REQ-D09, REQ-H08).
     """
 
     evidence_samples: list[dict[str, Any]]
@@ -60,6 +62,7 @@ class AuditPackContents:
     key_inventory: dict[str, Any]
     policy_refs: dict[str, str]
     release_metadata: dict[str, Any]
+    dr_evidence: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,11 +199,12 @@ class AuditPackService:
         include_security_logs: bool = True,
         include_ops_logs: bool = False,
         include_config_snapshots: bool = True,
+        include_dr_evidence: bool = True,
     ) -> SealedAuditPack:
         """Generate a sealed audit pack for a date range.
 
         Collects evidence samples, audit logs, configuration snapshots,
-        and cryptographic parameters, then seals and timestamps the pack.
+        cryptographic parameters, and DR evidence, then seals and timestamps the pack.
 
         Args:
             start_date: Start of date range (inclusive).
@@ -211,6 +215,7 @@ class AuditPackService:
             include_security_logs: Whether to include security audit logs.
             include_ops_logs: Whether to include operational audit logs.
             include_config_snapshots: Whether to include config snapshots.
+            include_dr_evidence: Whether to include DR/backup evidence (REQ-H08).
 
         Returns:
             SealedAuditPack with all contents and sealing attestations.
@@ -261,6 +266,11 @@ class AuditPackService:
         # Get release/SBOM metadata
         release_metadata = self._get_release_metadata()
 
+        # Collect DR evidence (REQ-D09, REQ-H08)
+        dr_evidence = None
+        if include_dr_evidence:
+            dr_evidence = await self._collect_dr_evidence(start_dt, end_dt)
+
         # Build contents for sealing
         pack_contents = AuditPackContents(
             evidence_samples=evidence_samples,
@@ -270,6 +280,7 @@ class AuditPackService:
             key_inventory=key_inventory,
             policy_refs=policy_refs,
             release_metadata=release_metadata,
+            dr_evidence=dr_evidence,
         )
 
         # Build pack manifest
@@ -320,6 +331,7 @@ class AuditPackService:
             "ops_log_count": log_proofs.get("ops", {}).get("record_count", 0),
             "config_snapshot_count": len(config_snapshots),
             "key_count": key_inventory.get("total_keys", 0),
+            "dr_evidence_count": len(dr_evidence) if dr_evidence else 0,
         }
 
         logger.info(
@@ -563,6 +575,46 @@ class AuditPackService:
             "build_timestamp": datetime.now(UTC).isoformat(),
         }
 
+    async def _collect_dr_evidence(
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> list[dict[str, Any]]:
+        """Collect DR/backup evidence for the date range (REQ-D09, REQ-H08).
+
+        Retrieves backup execution records, restore test results, and DR drill
+        evidence within the specified date range for inclusion in the audit pack.
+
+        Args:
+            start_dt: Start datetime (inclusive).
+            end_dt: End datetime (inclusive).
+
+        Returns:
+            List of DR evidence record dictionaries.
+        """
+        try:
+            from qerds.services.dr_evidence import DREvidenceService
+
+            # Create DR evidence service with the same session
+            dr_service = DREvidenceService(self._session, self._object_store)
+
+            # Get all DR evidence records for the date range
+            records = await dr_service.get_records_for_audit_pack(start_dt, end_dt)
+
+            logger.debug(
+                "Collected %d DR evidence records for audit pack",
+                len(records),
+            )
+
+            return records
+
+        except ImportError:
+            logger.warning("DR evidence service not available, skipping DR evidence collection")
+            return []
+        except Exception as e:
+            logger.warning("Failed to collect DR evidence: %s", e)
+            return []
+
     def _get_qualification_note(self) -> str:
         """Get qualification status note for verification instructions.
 
@@ -614,10 +666,12 @@ class AuditPackService:
                 "key_inventory": contents.key_inventory,
                 "policy_refs": contents.policy_refs,
                 "release_metadata": contents.release_metadata,
+                "dr_evidence": contents.dr_evidence or [],
             },
             "statistics": {
                 "evidence_sample_count": len(contents.evidence_samples),
                 "config_snapshot_count": len(contents.config_snapshots),
+                "dr_evidence_count": len(contents.dr_evidence) if contents.dr_evidence else 0,
             },
         }
 

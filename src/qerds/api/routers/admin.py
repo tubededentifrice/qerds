@@ -3,7 +3,8 @@
 Handles operational and administrative endpoints.
 All endpoints require admin authentication and RBAC.
 
-Covers requirements: REQ-A02, REQ-D02, REQ-D08, REQ-H01, REQ-H03, REQ-H04, REQ-H05, REQ-H06, REQ-H10
+Covers requirements: REQ-A02, REQ-D02, REQ-D08, REQ-D09, REQ-H01, REQ-H03,
+REQ-H04, REQ-H05, REQ-H06, REQ-H08, REQ-H10
 See specs/implementation/35-apis.md for API design.
 """
 
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 if TYPE_CHECKING:
     from qerds.services.conformity_package import ConformityPackageService
+    from qerds.services.dr_evidence import DREvidenceRecord, DREvidenceService
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
@@ -30,6 +32,7 @@ from qerds.api.schemas.admin import (
     AuditPackRequest,
     AuditPackResponse,
     AuditPackVerification,
+    BackupScopeSchema,
     ConfigSnapshotRequest,
     ConfigSnapshotResponse,
     ConformityPackageRequest,
@@ -42,6 +45,9 @@ from qerds.api.schemas.admin import (
     DisclosureExportRequest,
     DisclosureExportResponse,
     DisputeTimelineResponse,
+    DREvidenceListResponse,
+    DREvidenceRecordResponse,
+    DREvidenceSummaryResponse,
     EvidenceStats,
     EvidenceVerificationResult,
     IncidentExportResponse,
@@ -49,7 +55,12 @@ from qerds.api.schemas.admin import (
     IncidentTimelineEvent,
     PartyInfoResponse,
     PermissionChangeRecord,
+    RecordBackupExecutionRequest,
+    RecordDRDrillRequest,
+    RecordRestoreTestRequest,
     RoleBindingExport,
+    RPOTargetSchema,
+    RTOTargetSchema,
     StorageStats,
     SystemStatsResponse,
     TimelineEventSummary,
@@ -1456,4 +1467,550 @@ async def get_traceability_matrix(
         by_category=by_category,
         by_status=by_status,
         entries=entries,
+    )
+
+
+# -----------------------------------------------------------------------------
+# DR Evidence Management (REQ-D09, REQ-H08)
+# -----------------------------------------------------------------------------
+
+# In-memory DR evidence service instance (would be dependency injected in production)
+_dr_evidence_service = None
+
+
+async def get_dr_evidence_service(db: DbSession) -> DREvidenceService:
+    """Get DR evidence service instance.
+
+    Creates or returns a cached DR evidence service.
+    In production, this would be properly dependency-injected.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        DREvidenceService instance.
+    """
+    from qerds.services.dr_evidence import DREvidenceService
+
+    global _dr_evidence_service
+    if _dr_evidence_service is None:
+        _dr_evidence_service = DREvidenceService(db)
+    return _dr_evidence_service
+
+
+@router.post(
+    "/dr-evidence/backup",
+    response_model=DREvidenceRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record backup execution",
+    description="Record evidence of a backup execution for audit purposes.",
+)
+async def record_backup_execution(
+    request_body: RecordBackupExecutionRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DREvidenceRecordResponse:
+    """Record a backup execution event.
+
+    Records evidence of a backup operation for compliance with REQ-D09 and REQ-H08.
+    This is used by operators to document scheduled and manual backups.
+
+    Args:
+        request_body: Backup execution details.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Created evidence record.
+    """
+    from qerds.services.dr_evidence import BackupScope, DREvidenceOutcome
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="record_backup_execution",
+        target_type="dr_evidence",
+        target_id="backup",
+        details={
+            "outcome": request_body.outcome,
+            "summary": request_body.summary[:100],
+        },
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        # Convert schema to domain objects
+        backup_scope = None
+        if request_body.backup_scope:
+            backup_scope = BackupScope(
+                postgresql=request_body.backup_scope.postgresql,
+                object_store=request_body.backup_scope.object_store,
+                audit_logs=request_body.backup_scope.audit_logs,
+                config=request_body.backup_scope.config,
+            )
+
+        outcome = DREvidenceOutcome(request_body.outcome)
+
+        record = await service.record_backup_execution(
+            executed_by=str(user.principal_id),
+            outcome=outcome,
+            backup_scope=backup_scope,
+            duration_seconds=request_body.duration_seconds,
+            summary=request_body.summary,
+            details=request_body.details or {},
+            executed_at=request_body.executed_at,
+        )
+
+        await db.commit()
+
+        return _convert_record_to_response(record)
+
+    except Exception as e:
+        logger.exception("Failed to record backup execution: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record backup execution: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/dr-evidence/restore-test",
+    response_model=DREvidenceRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record restore test",
+    description="Record evidence of a restore test for audit purposes.",
+)
+async def record_restore_test(
+    request_body: RecordRestoreTestRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DREvidenceRecordResponse:
+    """Record a restore test execution.
+
+    Records evidence of a restore validation test for compliance with REQ-D09 and REQ-H08.
+
+    Args:
+        request_body: Restore test details.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Created evidence record.
+    """
+    from qerds.services.dr_evidence import BackupScope, DREvidenceOutcome
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="record_restore_test",
+        target_type="dr_evidence",
+        target_id="restore_test",
+        details={
+            "outcome": request_body.outcome,
+            "summary": request_body.summary[:100],
+        },
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        # Convert schema to domain objects
+        backup_scope = None
+        if request_body.backup_scope:
+            backup_scope = BackupScope(
+                postgresql=request_body.backup_scope.postgresql,
+                object_store=request_body.backup_scope.object_store,
+                audit_logs=request_body.backup_scope.audit_logs,
+                config=request_body.backup_scope.config,
+            )
+
+        outcome = DREvidenceOutcome(request_body.outcome)
+
+        record = await service.record_restore_test(
+            executed_by=str(user.principal_id),
+            outcome=outcome,
+            backup_scope=backup_scope,
+            duration_seconds=request_body.duration_seconds,
+            summary=request_body.summary,
+            details=request_body.details or {},
+            executed_at=request_body.executed_at,
+        )
+
+        await db.commit()
+
+        return _convert_record_to_response(record)
+
+    except Exception as e:
+        logger.exception("Failed to record restore test: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record restore test: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/dr-evidence/dr-drill",
+    response_model=DREvidenceRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record DR drill",
+    description="Record evidence of a disaster recovery drill/exercise for audit purposes.",
+)
+async def record_dr_drill(
+    request_body: RecordDRDrillRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DREvidenceRecordResponse:
+    """Record a DR drill/exercise.
+
+    Records evidence of a disaster recovery exercise for compliance with REQ-D09 and REQ-H08.
+    This includes RPO/RTO measurements for validation against targets.
+
+    Args:
+        request_body: DR drill details including RPO/RTO measurements.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        Created evidence record.
+    """
+    from qerds.services.dr_evidence import DREvidenceOutcome, RPOTarget, RTOTarget
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="record_dr_drill",
+        target_type="dr_evidence",
+        target_id="dr_drill",
+        details={
+            "outcome": request_body.outcome,
+            "summary": request_body.summary[:100],
+        },
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        # Convert schema to domain objects
+        rpo = None
+        if request_body.rpo:
+            rpo = RPOTarget(
+                target_minutes=request_body.rpo.target_minutes,
+                measured_minutes=request_body.rpo.measured_minutes,
+                meets_target=request_body.rpo.meets_target,
+            )
+
+        rto = None
+        if request_body.rto:
+            rto = RTOTarget(
+                target_minutes=request_body.rto.target_minutes,
+                measured_minutes=request_body.rto.measured_minutes,
+                meets_target=request_body.rto.meets_target,
+            )
+
+        outcome = DREvidenceOutcome(request_body.outcome)
+
+        record = await service.record_dr_drill(
+            executed_by=str(user.principal_id),
+            outcome=outcome,
+            duration_seconds=request_body.duration_seconds,
+            rpo=rpo,
+            rto=rto,
+            summary=request_body.summary,
+            details=request_body.details or {},
+            executed_at=request_body.executed_at,
+        )
+
+        await db.commit()
+
+        return _convert_record_to_response(record)
+
+    except Exception as e:
+        logger.exception("Failed to record DR drill: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record DR drill: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/dr-evidence",
+    response_model=DREvidenceListResponse,
+    summary="List DR evidence records",
+    description="List DR evidence records with optional filtering.",
+)
+async def list_dr_evidence(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    evidence_type: Annotated[
+        str | None,
+        Query(
+            pattern=r"^(backup_execution|restore_test|dr_drill|rto_measurement|rpo_measurement)$",
+            description="Filter by evidence type",
+        ),
+    ] = None,
+    start_date: Annotated[
+        datetime | None, Query(description="Filter by executed_at >= start_date")
+    ] = None,
+    end_date: Annotated[
+        datetime | None, Query(description="Filter by executed_at <= end_date")
+    ] = None,
+    limit: Annotated[
+        int, Query(ge=1, le=1000, description="Maximum number of records to return")
+    ] = 100,
+) -> DREvidenceListResponse:
+    """List DR evidence records with optional filtering.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        evidence_type: Optional filter by evidence type.
+        start_date: Optional filter by start date.
+        end_date: Optional filter by end date.
+        limit: Maximum records to return.
+
+    Returns:
+        List of matching evidence records.
+    """
+    from qerds.services.dr_evidence import DREvidenceType
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="list_dr_evidence",
+        target_type="dr_evidence",
+        target_id="list",
+        details={
+            "evidence_type": evidence_type,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        },
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        # Convert evidence_type string to enum
+        type_filter = None
+        if evidence_type:
+            type_filter = DREvidenceType(evidence_type)
+
+        records = await service.list_records(
+            evidence_type=type_filter,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+
+        await db.commit()
+
+        return DREvidenceListResponse(
+            records=[_convert_record_to_response(r) for r in records],
+            total_count=len(records),
+        )
+
+    except Exception as e:
+        logger.exception("Failed to list DR evidence: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list DR evidence: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/dr-evidence/summary",
+    response_model=DREvidenceSummaryResponse,
+    summary="Get DR evidence summary",
+    description="Get summary statistics for DR evidence in a time period.",
+)
+async def get_dr_evidence_summary(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    start_date: Annotated[datetime, Query(description="Start of the summary period")],
+    end_date: Annotated[datetime, Query(description="End of the summary period")],
+) -> DREvidenceSummaryResponse:
+    """Get DR evidence summary for a time period.
+
+    Provides summary statistics including backup counts, restore test counts,
+    DR drill counts, success rates, and RPO/RTO compliance status.
+
+    Args:
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+        start_date: Start of the summary period.
+        end_date: End of the summary period.
+
+    Returns:
+        Summary statistics for the period.
+    """
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="get_dr_evidence_summary",
+        target_type="dr_evidence",
+        target_id="summary",
+        details={
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        },
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        summary = await service.get_summary(start_date, end_date)
+
+        await db.commit()
+
+        return DREvidenceSummaryResponse(
+            period_start=summary.period_start,
+            period_end=summary.period_end,
+            backup_count=summary.backup_count,
+            restore_test_count=summary.restore_test_count,
+            dr_drill_count=summary.dr_drill_count,
+            success_rate=summary.success_rate,
+            last_successful_backup=summary.last_successful_backup,
+            last_restore_test=summary.last_restore_test,
+            last_dr_drill=summary.last_dr_drill,
+            rpo_compliance=summary.rpo_compliance,
+            rto_compliance=summary.rto_compliance,
+        )
+
+    except Exception as e:
+        logger.exception("Failed to get DR evidence summary: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get DR evidence summary: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/dr-evidence/{record_id}",
+    response_model=DREvidenceRecordResponse,
+    summary="Get DR evidence record",
+    description="Get a specific DR evidence record by ID.",
+)
+async def get_dr_evidence_record(
+    record_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DREvidenceRecordResponse:
+    """Get a specific DR evidence record.
+
+    Args:
+        record_id: UUID of the evidence record.
+        user: Authenticated admin user.
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        The evidence record.
+
+    Raises:
+        HTTPException: If record not found.
+    """
+    from qerds.services.dr_evidence import DREvidenceNotFoundError
+
+    # Log the admin action
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="get_dr_evidence_record",
+        target_type="dr_evidence",
+        target_id=str(record_id),
+    )
+
+    try:
+        service = await get_dr_evidence_service(db)
+
+        record = await service.get_record(record_id)
+
+        await db.commit()
+
+        return _convert_record_to_response(record)
+
+    except DREvidenceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"DR evidence record {record_id} not found",
+        ) from e
+    except Exception as e:
+        logger.exception("Failed to get DR evidence record: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get DR evidence record: {e!s}",
+        ) from e
+
+
+def _convert_record_to_response(record: DREvidenceRecord) -> DREvidenceRecordResponse:
+    """Convert a DREvidenceRecord to API response schema.
+
+    Args:
+        record: The DREvidenceRecord from the service.
+
+    Returns:
+        API response schema.
+    """
+    backup_scope = None
+    if record.backup_scope:
+        backup_scope = BackupScopeSchema(
+            postgresql=record.backup_scope.postgresql,
+            object_store=record.backup_scope.object_store,
+            audit_logs=record.backup_scope.audit_logs,
+            config=record.backup_scope.config,
+        )
+
+    rpo = None
+    if record.rpo:
+        rpo = RPOTargetSchema(
+            target_minutes=record.rpo.target_minutes,
+            measured_minutes=record.rpo.measured_minutes,
+            meets_target=record.rpo.meets_target,
+        )
+
+    rto = None
+    if record.rto:
+        rto = RTOTargetSchema(
+            target_minutes=record.rto.target_minutes,
+            measured_minutes=record.rto.measured_minutes,
+            meets_target=record.rto.meets_target,
+        )
+
+    return DREvidenceRecordResponse(
+        record_id=record.record_id,
+        evidence_type=record.evidence_type.value,
+        outcome=record.outcome.value,
+        executed_at=record.executed_at,
+        executed_by=record.executed_by,
+        duration_seconds=record.duration_seconds,
+        backup_scope=backup_scope,
+        rpo=rpo,
+        rto=rto,
+        summary=record.summary,
+        details=record.details,
+        artifact_refs=record.artifact_refs,
+        record_hash=record.record_hash,
+        created_at=record.created_at,
     )
