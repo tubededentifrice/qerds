@@ -57,6 +57,8 @@ dev = [
     "httpx==0.28.1",
     "ruff==0.14.13",
     "mypy==1.19.1",
+    # S3 mocking for unit tests
+    "moto[s3]==5.1.20",
     # Type stubs
     "boto3-stubs[s3]==1.42.32",
     "types-jinja2==2.11.9",
