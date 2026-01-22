@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}QERDS{% endblock %} - Service de Lettre Recommandée Électronique</title>
+    <title>{% block title %}{{ _('common.app_title') }}{% endblock %} - {{ _('common.app_description') }}</title>
     <link rel="preconnect" href="/static/fonts/">
     <link rel="stylesheet" href="/static/css/fonts.css">
     <link rel="stylesheet" href="/static/css/main.css">
@@ -27,23 +27,23 @@
                     </svg>
                 </div>
                 <div class="brand-text">
-                    <span class="brand-name">QERDS</span>
-                    <span class="brand-tagline">Lettre Recommandée Électronique Qualifiée</span>
+                    <span class="brand-name">{{ _('common.app_title') }}</span>
+                    <span class="brand-tagline">{{ _('common.app_tagline') }}</span>
                 </div>
             </a>
 
             {% block nav %}
-            <nav class="header-nav" aria-label="Navigation principale">
+            <nav class="header-nav" aria-label="{{ _('nav.main_nav_label') }}">
                 {% if user %}
                 <ul class="nav-list">
                     {% if user.role == 'sender' %}
-                    <li><a href="/sender/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Tableau de bord</a></li>
-                    <li><a href="/sender/new" class="nav-link {% if active_page == 'new' %}active{% endif %}">Nouvel envoi</a></li>
-                    <li><a href="/sender/history" class="nav-link {% if active_page == 'history' %}active{% endif %}">Historique</a></li>
+                    <li><a href="/sender/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">{{ _('nav.dashboard') }}</a></li>
+                    <li><a href="/sender/new" class="nav-link {% if active_page == 'new' %}active{% endif %}">{{ _('nav.new_delivery') }}</a></li>
+                    <li><a href="/sender/history" class="nav-link {% if active_page == 'history' %}active{% endif %}">{{ _('nav.history') }}</a></li>
                     {% elif user.role == 'admin' %}
-                    <li><a href="/admin/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Tableau de bord</a></li>
-                    <li><a href="/admin/audit" class="nav-link {% if active_page == 'audit' %}active{% endif %}">Audit</a></li>
-                    <li><a href="/admin/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">Configuration</a></li>
+                    <li><a href="/admin/dashboard" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">{{ _('nav.dashboard') }}</a></li>
+                    <li><a href="/admin/audit" class="nav-link {% if active_page == 'audit' %}active{% endif %}">{{ _('nav.audit') }}</a></li>
+                    <li><a href="/admin/config" class="nav-link {% if active_page == 'config' %}active{% endif %}">{{ _('nav.config') }}</a></li>
                     {% endif %}
                 </ul>
                 {% endif %}
@@ -51,6 +51,7 @@
             {% endblock %}
 
             <div class="header-actions">
+                {% include 'partials/language_switcher.html' %}
                 {% if user %}
                 <div class="user-menu">
                     <button class="user-menu-trigger" aria-expanded="false" aria-haspopup="true">
@@ -61,12 +62,12 @@
                         </svg>
                     </button>
                     <div class="user-dropdown" hidden>
-                        <a href="/account" class="dropdown-item">Mon compte</a>
-                        <a href="/logout" class="dropdown-item dropdown-item--danger">Déconnexion</a>
+                        <a href="/account" class="dropdown-item">{{ _('auth.my_account') }}</a>
+                        <a href="/logout" class="dropdown-item dropdown-item--danger">{{ _('auth.logout') }}</a>
                     </div>
                 </div>
                 {% else %}
-                <a href="/login" class="btn btn--primary btn--sm">Se connecter</a>
+                <a href="/login" class="btn btn--primary btn--sm">{{ _('auth.login') }}</a>
                 {% endif %}
             </div>
         </div>
@@ -82,47 +83,47 @@
         <div class="footer-container">
             <div class="footer-top">
                 <div class="footer-brand">
-                    <span class="footer-logo">QERDS</span>
-                    <p class="footer-description">Service de Lettre Recommandée Électronique Qualifiée conforme au règlement eIDAS et au Code des Postes et Communications Électroniques.</p>
+                    <span class="footer-logo">{{ _('common.app_title') }}</span>
+                    <p class="footer-description">{{ _('footer.description') }}</p>
                 </div>
                 <div class="footer-links">
                     <div class="footer-column">
-                        <h4 class="footer-heading">Service</h4>
+                        <h4 class="footer-heading">{{ _('footer.service') }}</h4>
                         <ul>
-                            <li><a href="/about">À propos</a></li>
-                            <li><a href="/help">Aide</a></li>
-                            <li><a href="/contact">Contact</a></li>
+                            <li><a href="/about">{{ _('footer.about') }}</a></li>
+                            <li><a href="/help">{{ _('footer.help') }}</a></li>
+                            <li><a href="/contact">{{ _('footer.contact') }}</a></li>
                         </ul>
                     </div>
                     <div class="footer-column">
-                        <h4 class="footer-heading">Légal</h4>
+                        <h4 class="footer-heading">{{ _('footer.legal') }}</h4>
                         <ul>
-                            <li><a href="/legal/terms">Conditions d'utilisation</a></li>
-                            <li><a href="/legal/privacy">Politique de confidentialité</a></li>
-                            <li><a href="/legal/cookies">Gestion des cookies</a></li>
+                            <li><a href="/legal/terms">{{ _('footer.terms') }}</a></li>
+                            <li><a href="/legal/privacy">{{ _('footer.privacy') }}</a></li>
+                            <li><a href="/legal/cookies">{{ _('footer.cookies') }}</a></li>
                         </ul>
                     </div>
                     <div class="footer-column">
-                        <h4 class="footer-heading">Conformité</h4>
+                        <h4 class="footer-heading">{{ _('footer.compliance') }}</h4>
                         <ul>
-                            <li><a href="/compliance/eidas">Certification eIDAS</a></li>
-                            <li><a href="/compliance/arcep">Enregistrement ARCEP</a></li>
-                            <li><a href="/verify">Vérification de preuves</a></li>
+                            <li><a href="/compliance/eidas">{{ _('footer.eidas_certification') }}</a></li>
+                            <li><a href="/compliance/arcep">{{ _('footer.arcep_registration') }}</a></li>
+                            <li><a href="/verify">{{ _('footer.proof_verification') }}</a></li>
                         </ul>
                     </div>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p class="footer-legal">© {{ current_year }} QERDS - Tous droits réservés</p>
+                <p class="footer-legal">&copy; {{ current_year }} {{ _('common.app_title') }} - {{ _('footer.all_rights_reserved') }}</p>
                 <p class="footer-compliance">
                     {% if qualification_mode == 'qualified' %}
                     <span class="compliance-badge compliance-badge--qualified">
                         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
-                        Service Qualifié eIDAS
+                        {{ _('qualification.qualified') }}
                     </span>
                     {% else %}
                     <span class="compliance-badge compliance-badge--dev">
-                        Mode développement - Non qualifié
+                        {{ _('qualification.dev_not_qualified') }}
                     </span>
                     {% endif %}
                 </p>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Lettre recommandée acceptée{% endblock %}
+{% block title %}{{ _('accepted.title') }}{% endblock %}
 
 {% block nav %}{% endblock %}
 
@@ -11,9 +11,9 @@
             <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
     </div>
-    <h1 class="pickup-title" style="color: var(--color-success);">Lettre recommandée acceptée</h1>
+    <h1 class="pickup-title" style="color: var(--color-success);">{{ _('accepted.title') }}</h1>
     <p class="pickup-description">
-        Vous avez accepté ce courrier recommandé. Une preuve d'acceptation a été générée.
+        {{ _('accepted.accepted_message') }}
     </p>
 </div>
 
@@ -26,10 +26,10 @@
                 </svg>
                 <div>
                     <h2 style="font-size: var(--text-lg); font-weight: var(--font-semibold); color: var(--color-success);">
-                        Accusé de réception généré
+                        {{ _('accepted.receipt_generated') }}
                     </h2>
                     <p style="font-size: var(--text-sm); color: #065f46;">
-                        Accepté le {{ delivery.accepted_at_formatted }}
+                        {{ _('accepted.accepted_on') }} {{ delivery.accepted_at_formatted }}
                     </p>
                 </div>
             </div>
@@ -39,28 +39,28 @@
             <div class="delivery-info-list">
                 <!-- Sender identity is NOW revealed -->
                 <div class="delivery-info-item">
-                    <span class="delivery-info-label">Expéditeur</span>
+                    <span class="delivery-info-label">{{ _('delivery.sender') }}</span>
                     <span class="delivery-info-value" style="font-weight: var(--font-semibold);">{{ delivery.sender_name }}</span>
                     <span style="font-size: var(--text-sm); color: var(--text-secondary);">{{ delivery.sender_email }}</span>
                 </div>
 
                 <div class="delivery-info-item">
-                    <span class="delivery-info-label">Objet</span>
-                    <span class="delivery-info-value">{{ delivery.subject or 'Non spécifié' }}</span>
+                    <span class="delivery-info-label">{{ _('delivery.subject') }}</span>
+                    <span class="delivery-info-value">{{ delivery.subject or _('delivery.subject_not_specified') }}</span>
                 </div>
 
                 <div class="delivery-info-item">
-                    <span class="delivery-info-label">Date de dépôt</span>
+                    <span class="delivery-info-label">{{ _('delivery.deposit_date') }}</span>
                     <span class="delivery-info-value">{{ delivery.deposited_at_formatted }}</span>
                 </div>
 
                 <div class="delivery-info-item">
-                    <span class="delivery-info-label">Date d'acceptation</span>
+                    <span class="delivery-info-label">{{ _('accepted.accepted_on') }}</span>
                     <span class="delivery-info-value">{{ delivery.accepted_at_formatted }}</span>
                 </div>
 
                 <div class="delivery-info-item">
-                    <span class="delivery-info-label">Référence</span>
+                    <span class="delivery-info-label">{{ _('delivery.reference') }}</span>
                     <code style="font-family: var(--font-mono); font-size: var(--text-sm);">{{ delivery.id }}</code>
                 </div>
             </div>
@@ -71,17 +71,17 @@
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 <p class="content-download-name">{{ delivery.content_filename or 'document.pdf' }}</p>
-                <p class="content-download-meta">PDF • {{ delivery.content_size or '1.2 Mo' }}</p>
+                <p class="content-download-meta">PDF {{ delivery.content_size or '1.2 Mo' }}</p>
                 <a href="/recipient/deliveries/{{ delivery.id }}/content" class="btn btn--primary btn--lg">
                     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
-                    Télécharger le document
+                    {{ _('accepted.download_document') }}
                 </a>
             </div>
         </div>
 
         <footer class="pickup-card-footer">
             <h3 style="font-size: var(--text-sm); font-weight: var(--font-semibold); margin-bottom: var(--space-3);">
-                Preuves disponibles
+                {{ _('accepted.available_proofs') }}
             </h3>
             <div style="display: flex; flex-direction: column; gap: var(--space-2);">
                 <a href="/recipient/deliveries/{{ delivery.id }}/proof/reception" class="btn btn--outline btn--block" style="justify-content: flex-start; gap: var(--space-3);">
@@ -89,8 +89,8 @@
                         <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/>
                     </svg>
                     <span>
-                        <strong>Preuve d'Acceptation</strong>
-                        <small style="display: block; color: var(--text-secondary);">Accusé de réception officiel</small>
+                        <strong>{{ _('accepted.acceptance_proof') }}</strong>
+                        <small style="display: block; color: var(--text-secondary);">{{ _('accepted.official_receipt') }}</small>
                     </span>
                 </a>
                 <a href="/verify?id={{ delivery.proof_id }}" class="btn btn--ghost btn--block" style="justify-content: flex-start; gap: var(--space-3);">
@@ -98,8 +98,8 @@
                         <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
                     </svg>
                     <span>
-                        <strong>Vérifier l'authenticité</strong>
-                        <small style="display: block; color: var(--text-secondary);">Validation cryptographique</small>
+                        <strong>{{ _('accepted.verify_authenticity') }}</strong>
+                        <small style="display: block; color: var(--text-secondary);">{{ _('accepted.cryptographic_validation') }}</small>
                     </span>
                 </a>
             </div>
@@ -111,14 +111,14 @@
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
         </svg>
         <div>
-            <strong>Conservation des preuves</strong><br>
-            Vos preuves sont conservées pendant au moins 1 an conformément à la réglementation. Nous vous recommandons de télécharger une copie pour vos archives.
+            <strong>{{ _('accepted.proof_conservation') }}</strong><br>
+            {{ _('accepted.proof_conservation_note') }}
         </div>
     </div>
 
     <p class="text-center" style="font-size: var(--text-sm); color: var(--text-tertiary); max-width: 32rem; margin: var(--space-8) auto;">
-        <a href="/recipient/inbox">Voir mes autres courriers</a> •
-        <a href="/help">Aide</a>
+        <a href="/recipient/inbox">{{ _('accepted.view_other_mail') }}</a> |
+        <a href="/help">{{ _('accepted.help') }}</a>
     </p>
 </div>
 {% endblock %}

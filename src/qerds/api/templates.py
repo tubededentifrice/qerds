@@ -22,7 +22,10 @@ from qerds.api.i18n import (
     DEFAULT_LANGUAGE,
     SUPPORTED_LANGUAGES,
     create_translator,
+    get_available_languages,
     get_language,
+    get_language_context,
+    get_status_label,
     translate,
 )
 
@@ -82,6 +85,11 @@ def _configure_jinja_environment(templates: Jinja2Templates) -> None:
     # Add i18n translation function
     # The '_' function is available in templates: {{ _("auth.login") }}
     env.globals["_"] = translate
+
+    # Add language helper functions for templates
+    env.globals["get_available_languages"] = get_available_languages
+    env.globals["get_language_context"] = get_language_context
+    env.globals["get_status_label"] = get_status_label
 
 
 def format_date(value: datetime | str | None, format_str: str = "%d/%m/%Y") -> str:
@@ -220,6 +228,10 @@ def build_template_context(
     # Create language-specific translator function
     translator = create_translator(lang)
 
+    # Get language context and available languages for switcher
+    lang_context = get_language_context(lang)
+    available_languages = get_available_languages()
+
     # Build base context
     context: dict[str, Any] = {
         "request": request,
@@ -227,6 +239,8 @@ def build_template_context(
         "qualification_mode": qualification_mode,
         "current_year": datetime.now().year,
         "lang": lang,
+        "lang_context": lang_context,
+        "available_languages": available_languages,
         "_": translator,  # Language-specific translator
         "active_page": extra_context.pop("active_page", None),
     }

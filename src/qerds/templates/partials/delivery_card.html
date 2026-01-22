@@ -12,7 +12,7 @@
     </div>
 
     <div class="delivery-card-body">
-        <h3 class="delivery-subject">{{ delivery.subject or 'Sans objet' }}</h3>
+        <h3 class="delivery-subject">{{ delivery.subject or _('delivery.no_subject') }}</h3>
         <p class="delivery-recipient">
             <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
@@ -25,19 +25,19 @@
     <div class="delivery-card-footer">
         <div class="delivery-actions">
             {% if delivery.status == 'draft' %}
-            <a href="/sender/deliveries/{{ delivery.id }}/edit" class="btn btn--ghost btn--sm">Modifier</a>
-            <button type="button" class="btn btn--primary btn--sm" data-action="deposit">Déposer</button>
+            <a href="/sender/deliveries/{{ delivery.id }}/edit" class="btn btn--ghost btn--sm">{{ _('dashboard.edit') }}</a>
+            <button type="button" class="btn btn--primary btn--sm" data-action="deposit">{{ _('dashboard.deposit') }}</button>
             {% elif delivery.status in ['deposited', 'notified', 'available', 'accepted', 'received'] %}
-            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">Voir détails</a>
+            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">{{ _('dashboard.view_details') }}</a>
             <a href="/sender/deliveries/{{ delivery.id }}/proof" class="btn btn--outline btn--sm">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/></svg>
-                Preuve
+                {{ _('dashboard.proof') }}
             </a>
             {% elif delivery.status in ['refused', 'expired'] %}
-            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">Voir détails</a>
+            <a href="/sender/deliveries/{{ delivery.id }}" class="btn btn--ghost btn--sm">{{ _('dashboard.view_details') }}</a>
             <a href="/sender/deliveries/{{ delivery.id }}/proof" class="btn btn--outline btn--sm">
                 <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/></svg>
-                Preuve
+                {{ _('dashboard.proof') }}
             </a>
             {% endif %}
         </div>
