@@ -17,7 +17,7 @@ from collections.abc import AsyncGenerator, Generator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from qerds.api.main import app
+from qerds.api import create_app
 
 
 # ---------------------------------------------------------------------------
@@ -93,12 +93,21 @@ def s3_client(s3_endpoint: str, s3_credentials: dict[str, str]):
 # API client fixture (in-process testing via ASGI transport)
 # ---------------------------------------------------------------------------
 @pytest.fixture
-async def api_client() -> AsyncGenerator[AsyncClient, None]:
+def test_app():
+    """Create a test FastAPI application instance.
+
+    Uses the app factory to create a fresh application for testing.
+    """
+    return create_app()
+
+
+@pytest.fixture
+async def api_client(test_app) -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client for testing the API.
 
     Uses httpx with ASGI transport for in-process testing.
     """
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
