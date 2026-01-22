@@ -373,6 +373,128 @@ class PDFGenerator:
 
         return [f.name for f in self._template_dir.iterdir() if f.is_file() and f.suffix == ".html"]
 
+    def generate_deposit_proof(
+        self,
+        *,
+        delivery_id: str,
+        deposit_timestamp: str | datetime,
+        sender_name: str,
+        recipient_name: str,
+        recipient_email: str,
+        content_hash: str,
+        subject: str | None = None,
+        sender_email: str | None = None,
+        sender_address: str | None = None,
+        sender_organization: str | None = None,
+        recipient_organization: str | None = None,
+        content_info: dict[str, Any] | None = None,
+        seal_id: str | None = None,
+        seal_timestamp: str | datetime | None = None,
+        signature_algorithm: str = "Ed25519",
+        tsa_info: dict[str, str] | None = None,
+        proof_id: str | None = None,
+        verification_url: str | None = None,
+    ) -> PDFResult:
+        """Generate a Preuve de Depot (Proof of Deposit) PDF.
+
+        Generates the proof of deposit document per CPCE/LRE requirements,
+        emitted at EVT_DEPOSITED event. Covers REQ-B01, REQ-F01, REQ-F07.
+
+        The generated PDF contains:
+        - Provider header with qualification status
+        - Document title: "Preuve de Depot"
+        - Delivery reference (ID) and deposit timestamp
+        - Sender identity and address
+        - Recipient identity and email
+        - Subject line (if provided)
+        - Content hash/digest for integrity verification
+        - Provider seal visualization
+        - Timestamp authority information
+        - Verification instructions with proof ID and URL
+        - Qualification label (qualified/non-qualified)
+
+        Args:
+            delivery_id: Unique delivery reference identifier.
+            deposit_timestamp: Timestamp when the deposit occurred (ISO 8601 or datetime).
+            sender_name: Full name of the sender.
+            recipient_name: Full name of the recipient.
+            recipient_email: Email address of the recipient.
+            content_hash: SHA-256 hash of the delivered content.
+            subject: Subject line of the delivery (optional).
+            sender_email: Email address of the sender (optional).
+            sender_address: Physical address of the sender (optional).
+            sender_organization: Organization name of the sender (optional).
+            recipient_organization: Organization name of the recipient (optional).
+            content_info: Additional content metadata (document_count, total_size).
+            seal_id: Provider seal identifier (optional).
+            seal_timestamp: Timestamp of the seal (optional, defaults to deposit_timestamp).
+            signature_algorithm: Algorithm used for seal signature (default: Ed25519).
+            tsa_info: Timestamp authority information dict with keys:
+                name, policy_oid, token_id (all optional).
+            proof_id: Unique identifier for this proof document (optional).
+            verification_url: URL for verifying this proof (optional).
+
+        Returns:
+            PDFResult containing the PDF bytes and metadata.
+
+        Raises:
+            TemplateNotFoundError: If the deposit template is missing.
+            PDFGenerationError: If PDF rendering fails.
+
+        Example:
+            result = generator.generate_deposit_proof(
+                delivery_id="del-abc123-xyz789",
+                deposit_timestamp="2026-01-22T10:30:00Z",
+                sender_name="Jean Dupont",
+                recipient_name="Marie Martin",
+                recipient_email="marie.martin@example.com",
+                content_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                subject="Contrat de vente",
+                proof_id="PRF-2026-0122-ABC123",
+                verification_url="https://verify.qerds.example.com",
+            )
+        """
+        context: dict[str, Any] = {
+            "delivery_id": delivery_id,
+            "deposit_timestamp": deposit_timestamp,
+            "sender_name": sender_name,
+            "recipient_name": recipient_name,
+            "recipient_email": recipient_email,
+            "content_hash": content_hash,
+            "signature_algorithm": signature_algorithm,
+        }
+
+        # Add optional fields only if provided
+        if subject:
+            context["subject"] = subject
+        if sender_email:
+            context["sender_email"] = sender_email
+        if sender_address:
+            context["sender_address"] = sender_address
+        if sender_organization:
+            context["sender_organization"] = sender_organization
+        if recipient_organization:
+            context["recipient_organization"] = recipient_organization
+        if content_info:
+            context["content_info"] = content_info
+        if seal_id:
+            context["seal_id"] = seal_id
+        if seal_timestamp:
+            context["seal_timestamp"] = seal_timestamp
+        if tsa_info:
+            context["tsa_info"] = tsa_info
+        if proof_id:
+            context["proof_id"] = proof_id
+        if verification_url:
+            context["verification_url"] = verification_url
+
+        logger.debug(
+            "Generating deposit proof PDF for delivery_id=%s",
+            delivery_id,
+        )
+
+        return self.render_proof(template_name="deposit.html", context=context)
+
     @property
     def qualification_mode(self) -> str:
         """Get the current qualification mode."""
