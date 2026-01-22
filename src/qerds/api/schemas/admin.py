@@ -100,6 +100,57 @@ class TimelineEventSummary(BaseModel):
     metadata: dict[str, Any] | None = Field(None, description="Event-specific metadata")
 
 
+class EvidenceVerificationResult(BaseModel):
+    """Verification result for a single evidence object."""
+
+    evidence_object_id: UUID = Field(..., description="Evidence object ID")
+    status: str = Field(..., description="Verification status (valid/invalid/not_sealed/missing)")
+    content_hash_matches: bool | None = Field(None, description="Whether content hash verified")
+    has_provider_attestation: bool = Field(..., description="Provider seal present")
+    has_time_attestation: bool = Field(..., description="Timestamp token present")
+    qualification_label: str = Field(..., description="Qualification status")
+    verification_time: datetime = Field(..., description="When verification was performed")
+    errors: list[str] = Field(default_factory=list, description="Verification errors")
+
+
+class TimelineEventWithVerification(BaseModel):
+    """Timeline event with evidence verification results."""
+
+    event_id: UUID = Field(..., description="Evidence event ID")
+    event_type: str = Field(..., description="Type of event (e.g., evt_deposited)")
+    event_time: datetime = Field(..., description="When the event occurred")
+    actor_type: str = Field(..., description="Type of actor (sender, recipient, system)")
+    actor_ref: str = Field(..., description="Reference to the actor (may be redacted)")
+    description: str = Field(..., description="Human-readable description")
+    evidence_verifications: list[EvidenceVerificationResult] = Field(
+        default_factory=list, description="Verification results for evidence objects"
+    )
+    event_metadata: dict[str, Any] | None = Field(
+        None, description="Event metadata (may be redacted)"
+    )
+    policy_snapshot_id: UUID | None = Field(None, description="Policy in effect at event time")
+
+
+class PartyInfoResponse(BaseModel):
+    """Party information with redaction support."""
+
+    party_id: UUID = Field(..., description="Party identifier")
+    party_type: str = Field(..., description="Party type (natural_person/legal_person)")
+    display_name: str = Field(..., description="Display name (may be redacted)")
+    email_hash: str | None = Field(None, description="Hashed email for reference")
+    identity_ref: str | None = Field(None, description="Identity reference")
+
+
+class ContentInfoResponse(BaseModel):
+    """Content object information with redaction support."""
+
+    content_object_id: UUID = Field(..., description="Content identifier")
+    sha256: str = Field(..., description="Content hash for integrity")
+    size_bytes: int = Field(..., description="File size in bytes")
+    mime_type: str = Field(..., description="Content MIME type")
+    original_filename: str | None = Field(None, description="Filename (may be redacted)")
+
+
 class DeliveryTimelineResponse(BaseModel):
     """Response schema for delivery timeline (dispute reconstruction)."""
 
@@ -118,6 +169,58 @@ class DeliveryTimelineResponse(BaseModel):
     )
     generated_at: datetime = Field(..., description="When this timeline was generated")
     generated_by: str = Field(..., description="Admin user who requested timeline")
+
+
+class DisputeTimelineResponse(BaseModel):
+    """Enhanced dispute timeline response with verification and redaction."""
+
+    delivery_id: UUID = Field(..., description="Delivery identifier")
+    delivery_state: str = Field(..., description="Current delivery state")
+    jurisdiction_profile: str = Field(..., description="Jurisdiction profile")
+    sender: PartyInfoResponse = Field(..., description="Sender information")
+    recipient: PartyInfoResponse = Field(..., description="Recipient information")
+    content_objects: list[ContentInfoResponse] = Field(..., description="Content references")
+    events: list[TimelineEventWithVerification] = Field(
+        ..., description="Timeline events with verification"
+    )
+    policy_snapshots: list[UUID] = Field(
+        default_factory=list, description="Referenced policy snapshots"
+    )
+    generated_at: datetime = Field(..., description="When timeline was generated")
+    generated_by: str = Field(..., description="Admin who requested timeline")
+    redaction_level: str = Field(..., description="Redaction level applied")
+    verification_summary: dict[str, int] = Field(..., description="Verification status counts")
+
+
+class DisclosureExportRequest(BaseModel):
+    """Request schema for creating a disclosure export package."""
+
+    export_reason: str = Field(
+        ...,
+        min_length=10,
+        max_length=1000,
+        description="Purpose/justification for the disclosure (e.g., court order reference)",
+    )
+    redaction_level: str = Field(
+        "standard",
+        pattern=r"^(none|minimal|standard|full)$",
+        description="Level of GDPR-compliant redaction to apply",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DisclosureExportResponse(BaseModel):
+    """Response schema for disclosure export package."""
+
+    package_id: UUID = Field(..., description="Unique package identifier")
+    delivery_id: UUID = Field(..., description="Delivery being disclosed")
+    timeline: DisputeTimelineResponse = Field(..., description="Redacted dispute timeline")
+    export_reason: str = Field(..., description="Disclosure purpose")
+    exported_at: datetime = Field(..., description="Export timestamp")
+    exported_by: str = Field(..., description="Admin who created export")
+    package_hash: str = Field(..., description="SHA-256 hash of package contents")
+    integrity_manifest: dict[str, str] = Field(..., description="Component integrity hashes")
 
 
 # -----------------------------------------------------------------------------
