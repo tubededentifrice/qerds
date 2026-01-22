@@ -2057,6 +2057,89 @@ a:hover {
     word-break: break-all;
 }
 
+/* Additional size modifier for document hash */
+.verify-detail-value--hash {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    word-break: break-all;
+}
+
+/* Result message - secondary text under status */
+.verify-result-message {
+    font-size: var(--text-sm);
+    margin-top: var(--space-1);
+}
+
+.verify-result-header--valid .verify-result-message {
+    color: #065f46;
+}
+
+.verify-result-header--invalid .verify-result-message {
+    color: #991b1b;
+}
+
+/* Redacted info modifier for verify context */
+.redacted-info--verify {
+    margin-top: var(--space-1);
+}
+
+/* --------------------------------------------------------------------------
+   Help Steps (Verification Page)
+   -------------------------------------------------------------------------- */
+.help-steps {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.help-step {
+    display: flex;
+    gap: var(--space-4);
+}
+
+.help-step-number {
+    width: 2rem;
+    height: 2rem;
+    background: rgba(0, 0, 145, 0.08);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--color-primary);
+    font-weight: var(--font-semibold);
+}
+
+.help-step-content {
+    flex: 1;
+}
+
+.help-step-title {
+    font-weight: var(--font-medium);
+}
+
+.help-step-desc {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+/* Help section title */
+.help-section-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+    margin-bottom: var(--space-4);
+}
+
+/* Compliance footer text */
+.verify-compliance-note {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+}
+
+/* Page description centered modifier */
+.page-description--centered {
+    margin-inline: auto;
+}
+
 /* --------------------------------------------------------------------------
    Empty States
    -------------------------------------------------------------------------- */
