@@ -574,6 +574,163 @@ class TraceabilityMatrixResponse(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# DR Evidence Schemas (REQ-D09, REQ-H08)
+# -----------------------------------------------------------------------------
+
+
+class BackupScopeSchema(BaseModel):
+    """Schema for backup scope configuration."""
+
+    postgresql: bool = Field(True, description="Include PostgreSQL database")
+    object_store: bool = Field(True, description="Include object store (MinIO/S3)")
+    audit_logs: bool = Field(True, description="Include audit logs")
+    config: bool = Field(True, description="Include configuration")
+
+
+class RPOTargetSchema(BaseModel):
+    """Schema for RPO (Recovery Point Objective) target and measurement."""
+
+    target_minutes: int = Field(..., ge=1, description="Target RPO in minutes")
+    measured_minutes: float | None = Field(None, ge=0, description="Actual measured RPO in minutes")
+    meets_target: bool | None = Field(None, description="Whether the measured RPO meets the target")
+
+
+class RTOTargetSchema(BaseModel):
+    """Schema for RTO (Recovery Time Objective) target and measurement."""
+
+    target_minutes: int = Field(..., ge=1, description="Target RTO in minutes")
+    measured_minutes: float | None = Field(None, ge=0, description="Actual measured RTO in minutes")
+    meets_target: bool | None = Field(None, description="Whether the measured RTO meets the target")
+
+
+class RecordBackupExecutionRequest(BaseModel):
+    """Request schema for recording a backup execution."""
+
+    outcome: str = Field(
+        ...,
+        pattern=r"^(success|partial|failure|in_progress)$",
+        description="Outcome of the backup operation",
+    )
+    backup_scope: BackupScopeSchema | None = Field(
+        None, description="What was included in the backup"
+    )
+    duration_seconds: int | None = Field(None, ge=0, description="How long the backup took")
+    summary: str = Field(
+        ...,
+        min_length=10,
+        max_length=1000,
+        description="Human-readable summary of the backup operation",
+    )
+    details: dict[str, Any] | None = Field(
+        None, description="Detailed structured data about the operation"
+    )
+    executed_at: datetime | None = Field(
+        None, description="When the backup was executed (defaults to now)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RecordRestoreTestRequest(BaseModel):
+    """Request schema for recording a restore test."""
+
+    outcome: str = Field(
+        ...,
+        pattern=r"^(success|partial|failure|in_progress)$",
+        description="Outcome of the restore test",
+    )
+    backup_scope: BackupScopeSchema | None = Field(None, description="What was restored")
+    duration_seconds: int | None = Field(None, ge=0, description="How long the restore took")
+    summary: str = Field(
+        ...,
+        min_length=10,
+        max_length=1000,
+        description="Human-readable summary of the restore test",
+    )
+    details: dict[str, Any] | None = Field(
+        None, description="Detailed structured data about the operation"
+    )
+    executed_at: datetime | None = Field(
+        None, description="When the test was executed (defaults to now)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RecordDRDrillRequest(BaseModel):
+    """Request schema for recording a DR drill/exercise."""
+
+    outcome: str = Field(
+        ...,
+        pattern=r"^(success|partial|failure|in_progress)$",
+        description="Outcome of the DR drill",
+    )
+    duration_seconds: int | None = Field(None, ge=0, description="Total duration of the drill")
+    rpo: RPOTargetSchema | None = Field(None, description="RPO target and measured value")
+    rto: RTOTargetSchema | None = Field(None, description="RTO target and measured value")
+    summary: str = Field(
+        ...,
+        min_length=10,
+        max_length=2000,
+        description="Human-readable summary of the DR drill",
+    )
+    details: dict[str, Any] | None = Field(
+        None, description="Detailed structured data (runbook steps, participants, etc.)"
+    )
+    executed_at: datetime | None = Field(
+        None, description="When the drill was executed (defaults to now)"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DREvidenceRecordResponse(BaseModel):
+    """Response schema for a DR evidence record."""
+
+    record_id: UUID = Field(..., description="Unique identifier for the record")
+    evidence_type: str = Field(
+        ..., description="Type of evidence (backup_execution, restore_test, dr_drill)"
+    )
+    outcome: str = Field(..., description="Outcome of the operation")
+    executed_at: datetime = Field(..., description="When the operation was executed")
+    executed_by: str = Field(..., description="Who executed the operation")
+    duration_seconds: int | None = Field(None, description="Duration in seconds")
+    backup_scope: BackupScopeSchema | None = Field(None, description="Backup scope")
+    rpo: RPOTargetSchema | None = Field(None, description="RPO target and measurement")
+    rto: RTOTargetSchema | None = Field(None, description="RTO target and measurement")
+    summary: str = Field(..., description="Human-readable summary")
+    details: dict[str, Any] = Field(default_factory=dict, description="Detailed data")
+    artifact_refs: list[str] = Field(
+        default_factory=list, description="References to stored artifacts"
+    )
+    record_hash: str = Field(..., description="SHA-256 hash of the record")
+    created_at: datetime = Field(..., description="When this record was created")
+
+
+class DREvidenceSummaryResponse(BaseModel):
+    """Response schema for DR evidence summary."""
+
+    period_start: datetime = Field(..., description="Start of the summary period")
+    period_end: datetime = Field(..., description="End of the summary period")
+    backup_count: int = Field(0, description="Number of backup executions")
+    restore_test_count: int = Field(0, description="Number of restore tests")
+    dr_drill_count: int = Field(0, description="Number of DR drills")
+    success_rate: float = Field(0.0, description="Percentage of successful operations")
+    last_successful_backup: datetime | None = Field(None, description="Last successful backup")
+    last_restore_test: datetime | None = Field(None, description="Last restore test")
+    last_dr_drill: datetime | None = Field(None, description="Last DR drill")
+    rpo_compliance: bool | None = Field(None, description="Whether RPO targets are being met")
+    rto_compliance: bool | None = Field(None, description="Whether RTO targets are being met")
+
+
+class DREvidenceListResponse(BaseModel):
+    """Response schema for listing DR evidence records."""
+
+    records: list[DREvidenceRecordResponse] = Field(..., description="List of evidence records")
+    total_count: int = Field(..., description="Total number of records matching the filter")
+
+
+# -----------------------------------------------------------------------------
 # Common Response Schemas
 # -----------------------------------------------------------------------------
 
