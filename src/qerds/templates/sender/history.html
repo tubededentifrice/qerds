@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('history.title') }}{% endblock %}
+
+{% block main %}
+<div class="container">
+    <header class="page-header page-header--with-actions">
+        <div>
+            <h1 class="page-title">{{ _('history.title') }}</h1>
+            <p class="page-description">{{ _('history.description') }}</p>
+        </div>
+        <div class="page-actions">
+            <a href="/sender/new" class="btn btn--primary btn--lg">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/></svg>
+                {{ _('nav.new_delivery') }}
+            </a>
+        </div>
+    </header>
+
+    <!-- Filters Section -->
+    <section class="history-filters card" aria-label="{{ _('history.filter_status') }}">
+        <form class="history-filters-form" method="GET" action="/sender/history">
+            <div class="history-filters-row">
+                <!-- Search Input -->
+                <div class="history-search">
+                    <svg class="history-search-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
+                    </svg>
+                    <input type="search" name="q" class="form-input history-search-input" placeholder="{{ _('history.search_placeholder') }}" value="{{ search_query or '' }}" aria-label="{{ _('history.search_placeholder') }}">
+                </div>
+
+                <!-- Status Filter -->
+                <div class="history-filter-group">
+                    <label for="filter-status" class="sr-only">{{ _('history.filter_status') }}</label>
+                    <select id="filter-status" name="status" class="form-select history-filter-select">
+                        <option value="">{{ _('history.filter_status_all') }}</option>
+                        <option value="pending" {% if filter_status == 'pending' %}selected{% endif %}>{{ _('history.filter_status_pending') }}</option>
+                        <option value="completed" {% if filter_status == 'completed' %}selected{% endif %}>{{ _('history.filter_status_completed') }}</option>
+                        <option value="expired" {% if filter_status == 'expired' %}selected{% endif %}>{{ _('history.filter_status_expired') }}</option>
+                    </select>
+                </div>
+
+                <!-- Date Range Filter -->
+                <div class="history-filter-group">
+                    <label for="filter-date" class="sr-only">{{ _('history.filter_date') }}</label>
+                    <select id="filter-date" name="date_range" class="form-select history-filter-select">
+                        <option value="">{{ _('history.filter_date_all') }}</option>
+                        <option value="today" {% if filter_date == 'today' %}selected{% endif %}>{{ _('history.filter_date_today') }}</option>
+                        <option value="week" {% if filter_date == 'week' %}selected{% endif %}>{{ _('history.filter_date_week') }}</option>
+                        <option value="month" {% if filter_date == 'month' %}selected{% endif %}>{{ _('history.filter_date_month') }}</option>
+                    </select>
+                </div>
+
+                <!-- Sort -->
+                <div class="history-filter-group">
+                    <label for="sort-by" class="sr-only">{{ _('history.sort_by') }}</label>
+                    <select id="sort-by" name="sort" class="form-select history-filter-select">
+                        <option value="date_desc" {% if sort_by == 'date_desc' or not sort_by %}selected{% endif %}>{{ _('history.sort_date_desc') }}</option>
+                        <option value="date_asc" {% if sort_by == 'date_asc' %}selected{% endif %}>{{ _('history.sort_date_asc') }}</option>
+                        <option value="status" {% if sort_by == 'status' %}selected{% endif %}>{{ _('history.sort_status') }}</option>
+                    </select>
+                </div>
+
+                <!-- Filter Actions -->
+                <div class="history-filter-actions">
+                    <button type="submit" class="btn btn--primary btn--sm">{{ _('history.apply_filters') }}</button>
+                    <a href="/sender/history" class="btn btn--ghost btn--sm">{{ _('history.clear_filters') }}</a>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <!-- Results Header -->
+    <div class="history-results-header">
+        <p class="history-results-count">
+            {% if total_count %}
+            {{ total_count }} {{ _('history.results_count').replace('{count}', '') }}
+            {% endif %}
+        </p>
+        {% if deliveries and deliveries|length > 0 %}
+        <button type="button" class="btn btn--ghost btn--sm">
+            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+            </svg>
+            {{ _('history.export_results') }}
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Deliveries List -->
+    {% if deliveries and deliveries|length > 0 %}
+    <section class="history-list" aria-label="{{ _('history.title') }}">
+        {% for delivery in deliveries %}
+        <article class="history-item card" data-status="{{ delivery.status }}">
+            <a href="/sender/deliveries/{{ delivery.id }}" class="history-item-link">
+                <div class="history-item-main">
+                    <div class="history-item-meta">
+                        <span class="delivery-id">#{{ delivery.id[:8] }}</span>
+                        <time class="delivery-date" datetime="{{ delivery.created_at }}">{{ delivery.created_at_formatted }}</time>
+                    </div>
+                    <h3 class="history-item-subject">{{ delivery.subject or _('delivery.no_subject') }}</h3>
+                    <p class="history-item-recipient">
+                        <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/>
+                        </svg>
+                        {{ delivery.recipient_email }}
+                        {% if delivery.recipient_name %}<span class="history-item-recipient-name">({{ delivery.recipient_name }})</span>{% endif %}
+                    </p>
+                </div>
+                <div class="history-item-status">
+                    {% set status = delivery.status %}
+                    {% include 'partials/status_badge.html' %}
+                </div>
+                <div class="history-item-arrow">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/>
+                    </svg>
+                </div>
+            </a>
+        </article>
+        {% endfor %}
+    </section>
+
+    <!-- Pagination -->
+    {% if total_pages and total_pages > 1 %}
+    <nav class="history-pagination" aria-label="Pagination">
+        <div class="history-pagination-info">
+            {{ _('history.showing_results').replace('{start}', start_index|string).replace('{end}', end_index|string).replace('{total}', total_count|string) }}
+        </div>
+        <div class="history-pagination-controls">
+            {% if current_page > 1 %}
+            <a href="?page={{ current_page - 1 }}{% if search_query %}&q={{ search_query }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}{% if filter_date %}&date_range={{ filter_date }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" class="btn btn--ghost btn--sm">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/>
+                </svg>
+                {{ _('history.page_previous') }}
+            </a>
+            {% else %}
+            <span class="btn btn--ghost btn--sm" aria-disabled="true">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/>
+                </svg>
+                {{ _('history.page_previous') }}
+            </span>
+            {% endif %}
+
+            <span class="history-pagination-pages">
+                {{ current_page }} / {{ total_pages }}
+            </span>
+
+            {% if current_page < total_pages %}
+            <a href="?page={{ current_page + 1 }}{% if search_query %}&q={{ search_query }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}{% if filter_date %}&date_range={{ filter_date }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" class="btn btn--ghost btn--sm">
+                {{ _('history.page_next') }}
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/>
+                </svg>
+            </a>
+            {% else %}
+            <span class="btn btn--ghost btn--sm" aria-disabled="true">
+                {{ _('history.page_next') }}
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/>
+                </svg>
+            </span>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="card">
+        <div class="empty-state">
+            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <h3 class="empty-state-title">{{ _('history.no_results') }}</h3>
+            <p class="empty-state-description">{{ _('history.no_results_description') }}</p>
+            <a href="/sender/new" class="btn btn--primary">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/></svg>
+                {{ _('dashboard.create_delivery') }}
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('detail.title') }} - #{{ delivery.id[:8] }}{% endblock %}
+
+{% block main %}
+<div class="container container--narrow">
+    <header class="page-header">
+        <nav class="mb-4" aria-label="Breadcrumb">
+            <a href="/sender/history" class="breadcrumb-back">
+                &larr; {{ _('detail.back_to_history') }}
+            </a>
+        </nav>
+        <div class="detail-header">
+            <div class="detail-header-main">
+                <h1 class="page-title">{{ delivery.subject or _('delivery.no_subject') }}</h1>
+                <p class="delivery-id">#{{ delivery.id }}</p>
+            </div>
+            <div class="detail-header-status">
+                {% set status = delivery.status %}
+                {% include 'partials/status_badge.html' %}
+            </div>
+        </div>
+    </header>
+
+    <div class="detail-grid">
+        <!-- Main Content Column -->
+        <div class="detail-main">
+            <!-- Delivery Info Card -->
+            <section class="card" aria-labelledby="delivery-info-title">
+                <div class="card-header">
+                    <h2 id="delivery-info-title" class="card-title">{{ _('detail.delivery_info') }}</h2>
+                </div>
+                <div class="card-body">
+                    <dl class="detail-info-list">
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.delivery_id') }}</dt>
+                            <dd class="detail-info-value detail-info-value--mono">{{ delivery.id }}</dd>
+                        </div>
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.created_at') }}</dt>
+                            <dd class="detail-info-value">{{ delivery.created_at_formatted }}</dd>
+                        </div>
+                        {% if delivery.updated_at_formatted %}
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.updated_at') }}</dt>
+                            <dd class="detail-info-value">{{ delivery.updated_at_formatted }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if delivery.acceptance_deadline %}
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.deadline_info') }}</dt>
+                            <dd class="detail-info-value">
+                                {{ delivery.acceptance_deadline_formatted }}
+                                {% if delivery.is_expired %}
+                                <span class="detail-deadline-badge detail-deadline-badge--expired">{{ _('detail.deadline_expired') }}</span>
+                                {% elif delivery.days_remaining is defined and delivery.days_remaining >= 0 %}
+                                <span class="detail-deadline-badge detail-deadline-badge--active">{{ _('detail.days_remaining').replace('{count}', delivery.days_remaining|string) }}</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </section>
+
+            <!-- Recipient Info Card -->
+            <section class="card mt-6" aria-labelledby="recipient-info-title">
+                <div class="card-header">
+                    <h2 id="recipient-info-title" class="card-title">{{ _('detail.recipient_info') }}</h2>
+                </div>
+                <div class="card-body">
+                    <dl class="detail-info-list">
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.recipient_email') }}</dt>
+                            <dd class="detail-info-value">{{ delivery.recipient_email }}</dd>
+                        </div>
+                        {% if delivery.recipient_name %}
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.recipient_name') }}</dt>
+                            <dd class="detail-info-value">{{ delivery.recipient_name }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </section>
+
+            <!-- Content Info Card -->
+            <section class="card mt-6" aria-labelledby="content-info-title">
+                <div class="card-header">
+                    <h2 id="content-info-title" class="card-title">{{ _('detail.content_info') }}</h2>
+                </div>
+                <div class="card-body">
+                    <dl class="detail-info-list">
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.subject') }}</dt>
+                            <dd class="detail-info-value">{{ delivery.subject or _('delivery.subject_not_specified') }}</dd>
+                        </div>
+                        {% if delivery.message %}
+                        <div class="detail-info-item">
+                            <dt class="detail-info-label">{{ _('detail.message') }}</dt>
+                            <dd class="detail-info-value detail-info-value--message">{{ delivery.message }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+
+                    <!-- Attachments -->
+                    {% if delivery.attachments and delivery.attachments|length > 0 %}
+                    <div class="detail-attachments">
+                        <h3 class="detail-attachments-title">
+                            {{ _('detail.attachments') }}
+                            <span class="detail-attachments-count">{{ _('detail.attachment_count').replace('{count}', delivery.attachments|length|string) }}</span>
+                        </h3>
+                        <ul class="detail-attachments-list">
+                            {% for attachment in delivery.attachments %}
+                            <li class="detail-attachment-item">
+                                <svg class="detail-attachment-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <div class="detail-attachment-info">
+                                    <span class="detail-attachment-name">{{ attachment.filename }}</span>
+                                    <span class="detail-attachment-meta">{{ attachment.mime_type }} - {{ attachment.size_formatted }}</span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Timeline Card -->
+            <section class="card mt-6" aria-labelledby="timeline-title">
+                <div class="card-header">
+                    <h2 id="timeline-title" class="card-title">{{ _('detail.timeline') }}</h2>
+                </div>
+                <div class="card-body">
+                    {% if delivery.events and delivery.events|length > 0 %}
+                    <ol class="detail-timeline">
+                        {% for event in delivery.events %}
+                        <li class="detail-timeline-item {% if loop.first %}detail-timeline-item--current{% endif %}">
+                            <div class="detail-timeline-marker">
+                                {% if event.type == 'deposited' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v7h-2l-1 2H8l-1-2H5V5z"/></svg>
+                                {% elif event.type == 'notified' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
+                                {% elif event.type == 'available' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+                                {% elif event.type == 'accepted' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
+                                {% elif event.type == 'refused' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg>
+                                {% elif event.type == 'received' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
+                                {% elif event.type == 'expired' %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/></svg>
+                                {% else %}
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"/></svg>
+                                {% endif %}
+                            </div>
+                            <div class="detail-timeline-content">
+                                <p class="detail-timeline-title">{{ _('detail.timeline_event_' + event.type) }}</p>
+                                <time class="detail-timeline-time" datetime="{{ event.timestamp }}">{{ event.timestamp_formatted }}</time>
+                                {% if event.details %}
+                                <p class="detail-timeline-details">{{ event.details }}</p>
+                                {% endif %}
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="text-secondary">{{ _('detail.no_proofs') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="detail-sidebar">
+            <!-- Proofs Card -->
+            <section class="card" aria-labelledby="proofs-title">
+                <div class="card-header">
+                    <h2 id="proofs-title" class="card-title">{{ _('detail.proofs') }}</h2>
+                </div>
+                <div class="card-body">
+                    {% if delivery.proofs and delivery.proofs|length > 0 %}
+                    <ul class="detail-proofs-list">
+                        {% for proof in delivery.proofs %}
+                        <li class="detail-proof-item">
+                            <div class="detail-proof-info">
+                                <span class="detail-proof-name">{{ _('detail.proof_' + proof.type) }}</span>
+                                <time class="detail-proof-date">{{ proof.generated_at_formatted }}</time>
+                            </div>
+                            <div class="detail-proof-actions">
+                                <a href="/sender/deliveries/{{ delivery.id }}/proofs/{{ proof.type }}" class="btn btn--outline btn--sm" title="{{ _('detail.download_proof') }}">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+                                    </svg>
+                                    {{ _('detail.download_proof') }}
+                                </a>
+                                <a href="/verify?id={{ proof.id }}" class="btn btn--ghost btn--sm" title="{{ _('detail.verify_proof') }}">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                        <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                                    </svg>
+                                </a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="detail-proofs-empty">{{ _('detail.no_proofs') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Actions Card -->
+            <section class="card mt-6" aria-labelledby="actions-title">
+                <div class="card-header">
+                    <h2 id="actions-title" class="card-title">{{ _('detail.actions') }}</h2>
+                </div>
+                <div class="card-body">
+                    <div class="detail-actions">
+                        {% if delivery.status in ['notified', 'available'] %}
+                        <button type="button" class="btn btn--outline btn--block" data-action="resend-notification">
+                            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/>
+                            </svg>
+                            {{ _('detail.resend_notification') }}
+                        </button>
+                        <p class="detail-action-hint">{{ _('detail.resend_notification_hint') }}</p>
+                        {% endif %}
+
+                        {% if delivery.status == 'draft' %}
+                        <a href="/sender/deliveries/{{ delivery.id }}/edit" class="btn btn--primary btn--block">
+                            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                            </svg>
+                            {{ _('dashboard.edit') }}
+                        </a>
+                        <button type="button" class="btn btn--ghost btn--block mt-4" data-action="cancel-delivery">
+                            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"/>
+                            </svg>
+                            {{ _('detail.cancel_delivery') }}
+                        </button>
+                        <p class="detail-action-hint">{{ _('detail.cancel_delivery_hint') }}</p>
+                        {% endif %}
+
+                        {% if delivery.status not in ['draft'] %}
+                        <a href="/sender/history" class="btn btn--ghost btn--block">
+                            <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"/>
+                            </svg>
+                            {{ _('detail.back_to_history') }}
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+{% endblock %}
