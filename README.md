@@ -59,7 +59,7 @@ Legend: ✅ implemented, ❌ not implemented.
 | REQ-H04 | Incident detection/triage and exportable timelines | ❌ |  |
 | REQ-H05 | Change management artifacts (traceable deploys/config changes/rollback) | ❌ |  |
 | REQ-H06 | Admin access controls + access review reports | ❌ |  |
-| REQ-H07 | Key lifecycle ceremony evidence support (generation/rotation/revocation) | ❌ |  |
+| REQ-H07 | Key lifecycle ceremony evidence support (generation/rotation/revocation) | ✅ | `src/qerds/services/trust.py`, API `GET /trust/keys`, `POST /trust/keys/{id}/rotate`, `tests/test_trust.py::TestKeyLifecycle*` |
 | REQ-H08 | Backup/restore + DR exercise evidence suitable for audits | ❌ |  |
 | REQ-H09 | Vulnerability management evidence (scan/pentest/remediation tracking) | ❌ |  |
 | REQ-H10 | Disputes/support evidence (timeline reconstruction, controlled exports) | ❌ |  |
