@@ -43,16 +43,16 @@
 
     <!-- Recent Deliveries -->
     <section aria-labelledby="recent-deliveries-title">
-        <header class="flex items-center justify-between mb-6">
-            <h2 id="recent-deliveries-title" style="font-size: var(--text-xl); font-weight: var(--font-semibold);">{{ _('dashboard.recent_deliveries') }}</h2>
+        <header class="section-header">
+            <h2 id="recent-deliveries-title" class="section-title">{{ _('dashboard.recent_deliveries') }}</h2>
             <a href="/sender/history" class="btn btn--ghost btn--sm">
                 {{ _('dashboard.view_all') }}
-                <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1rem; height: 1rem;"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon-sm"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"/></svg>
             </a>
         </header>
 
         {% if deliveries %}
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: var(--space-4);">
+        <div class="deliveries-grid">
             {% for delivery in deliveries %}
             {% include 'partials/delivery_card.html' %}
             {% endfor %}
@@ -78,7 +78,7 @@
     <section class="mt-8" aria-labelledby="quick-actions-title">
         <h2 id="quick-actions-title" class="sr-only">{{ _('dashboard.quick_actions') }}</h2>
         <div class="card">
-            <div class="card-body" style="display: flex; flex-wrap: wrap; gap: var(--space-4); justify-content: center;">
+            <div class="card-body quick-actions">
                 <a href="/sender/new" class="btn btn--outline">
                     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"/></svg>
                     {{ _('nav.new_delivery') }}

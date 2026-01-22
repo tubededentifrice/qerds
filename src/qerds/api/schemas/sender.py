@@ -9,9 +9,9 @@ including delivery creation, content upload, and proof retrieval.
 from __future__ import annotations
 
 # NOTE: datetime and UUID must remain at runtime for Pydantic validation
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from typing import Annotated, Any
-from uuid import UUID  # noqa: TC003
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
