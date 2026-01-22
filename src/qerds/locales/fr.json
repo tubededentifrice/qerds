@@ -46,7 +46,12 @@
     "submit": "Envoyer",
     "cancel": "Annuler",
     "save_draft": "Enregistrer brouillon",
-    "send_now": "Envoyer maintenant"
+    "send_now": "Envoyer maintenant",
+    "saving_draft": "Enregistrement du brouillon...",
+    "sending": "Envoi en cours...",
+    "file_type_error": "Type de fichier non autorise. Formats acceptes : PDF, DOC, DOCX, ODT",
+    "file_size_error": "Fichier trop volumineux. Taille maximale : 10 Mo",
+    "remove_file": "Supprimer le fichier"
   },
   "delivery": {
     "new_delivery": "Nouvel envoi",

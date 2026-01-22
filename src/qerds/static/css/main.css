@@ -885,6 +885,233 @@ a:hover {
     color: var(--color-primary);
 }
 
+/* File upload - drag active state */
+.form-file--drag-active .form-file-label {
+    border-color: var(--color-primary);
+    background: rgba(0, 0, 145, 0.08);
+}
+
+/* File upload - selected state */
+.form-file--has-file .form-file-label {
+    display: none;
+}
+
+.form-file-selected {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: rgba(0, 0, 145, 0.04);
+    border: 2px solid var(--color-primary);
+    border-radius: var(--radius-lg);
+}
+
+.form-file-selected-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.form-file-selected-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.form-file-selected-name {
+    display: block;
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.form-file-selected-size {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.form-file-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.form-file-remove:hover {
+    background: var(--bg-surface-alt);
+    color: var(--color-danger);
+}
+
+.form-file-remove svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* File upload - error state */
+.form-file--error .form-file-label {
+    border-color: var(--color-danger);
+    background: rgba(225, 0, 15, 0.04);
+}
+
+.form-file--error .form-file-icon {
+    color: var(--color-danger);
+}
+
+/* Form fieldsets and radio groups */
+.form-fieldset {
+    border: none;
+    padding: 0;
+    margin: 0 0 var(--space-8) 0;
+}
+
+.form-fieldset--last {
+    margin-bottom: 0;
+}
+
+.form-fieldset-legend {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+    margin-bottom: var(--space-4);
+}
+
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+}
+
+.radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--bg-surface-alt);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.radio-option:hover {
+    border-color: var(--border-strong);
+}
+
+.radio-option:has(input:checked) {
+    border-color: var(--color-primary);
+    background: rgba(0, 0, 145, 0.04);
+}
+
+.radio-option input[type="radio"] {
+    margin-top: 0.25rem;
+    flex-shrink: 0;
+}
+
+.radio-option-content {
+    flex: 1;
+}
+
+.radio-option-title {
+    font-weight: var(--font-medium);
+}
+
+.radio-option-description {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+}
+
+/* Breadcrumb link */
+.breadcrumb-back {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.breadcrumb-back:hover {
+    color: var(--text-primary);
+}
+
+/* Delivery form specific */
+.delivery-form {
+    position: relative;
+}
+
+.delivery-form-actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: flex-end;
+}
+
+/* Form progress overlay */
+.form-progress-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: inherit;
+    z-index: 10;
+}
+
+.form-progress-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    text-align: center;
+}
+
+.form-progress-text {
+    font-size: var(--text-lg);
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+}
+
+/* Spinner animation */
+.spinner {
+    width: 1.25rem;
+    height: 1.25rem;
+    animation: spin 1s linear infinite;
+}
+
+.spinner--lg {
+    width: 3rem;
+    height: 3rem;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Button loading state */
+.btn-icon,
+.btn-loading {
+    display: inline-flex;
+}
+
+.btn--loading .btn-icon,
+.btn--loading .btn-text {
+    display: none;
+}
+
+.btn--loading .btn-loading {
+    display: inline-flex;
+}
+
 /* --------------------------------------------------------------------------
    Cards
    -------------------------------------------------------------------------- */
@@ -1965,6 +2192,14 @@ a:hover {
     }
 
     .delivery-card-footer .btn {
+        width: 100%;
+    }
+
+    .delivery-form-actions {
+        flex-direction: column;
+    }
+
+    .delivery-form-actions .btn {
         width: 100%;
     }
 }

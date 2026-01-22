@@ -6,7 +6,7 @@
 <div class="container container--narrow">
     <header class="page-header">
         <nav class="mb-4" aria-label="Breadcrumb">
-            <a href="/sender/dashboard" style="font-size: var(--text-sm); color: var(--text-secondary); text-decoration: none;">
+            <a href="/sender/dashboard" class="breadcrumb-back">
                 &larr; {{ _('delivery.back_to_dashboard') }}
             </a>
         </nav>
@@ -14,36 +14,38 @@
         <p class="page-description">{{ _('delivery.new_delivery_description') }}</p>
     </header>
 
-    <form class="card card--elevated" action="/sender/deliveries" method="POST" enctype="multipart/form-data">
+    <form class="card card--elevated delivery-form" action="/sender/deliveries" method="POST" enctype="multipart/form-data" id="delivery-form">
         <div class="card-body">
             <!-- Recipient Section -->
-            <fieldset style="border: none; padding: 0; margin: 0 0 var(--space-8) 0;">
-                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+            <fieldset class="form-fieldset">
+                <legend class="form-fieldset-legend">
                     {{ _('delivery.recipient') }}
                 </legend>
 
                 <div class="form-group">
                     <label for="recipient_email" class="form-label form-label--required">{{ _('delivery.recipient_email') }}</label>
-                    <input type="email" id="recipient_email" name="recipient_email" class="form-input" placeholder="{{ _('delivery.recipient_email_placeholder') }}" required>
-                    <p class="form-hint">{{ _('delivery.recipient_email_hint') }}</p>
+                    <input type="email" id="recipient_email" name="recipient_email" class="form-input" placeholder="{{ _('delivery.recipient_email_placeholder') }}" required aria-describedby="recipient_email_hint recipient_email_error">
+                    <p class="form-hint" id="recipient_email_hint">{{ _('delivery.recipient_email_hint') }}</p>
+                    <p class="form-error" id="recipient_email_error" hidden></p>
                 </div>
 
                 <div class="form-group">
                     <label for="recipient_name" class="form-label">{{ _('delivery.recipient_name_optional') }}</label>
-                    <input type="text" id="recipient_name" name="recipient_name" class="form-input" placeholder="{{ _('delivery.recipient_name_placeholder') }}">
-                    <p class="form-hint">{{ _('delivery.recipient_name_hint') }}</p>
+                    <input type="text" id="recipient_name" name="recipient_name" class="form-input" placeholder="{{ _('delivery.recipient_name_placeholder') }}" aria-describedby="recipient_name_hint">
+                    <p class="form-hint" id="recipient_name_hint">{{ _('delivery.recipient_name_hint') }}</p>
                 </div>
             </fieldset>
 
             <!-- Content Section -->
-            <fieldset style="border: none; padding: 0; margin: 0 0 var(--space-8) 0;">
-                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+            <fieldset class="form-fieldset">
+                <legend class="form-fieldset-legend">
                     {{ _('delivery.content') }}
                 </legend>
 
                 <div class="form-group">
                     <label for="subject" class="form-label form-label--required">{{ _('delivery.subject') }}</label>
-                    <input type="text" id="subject" name="subject" class="form-input" placeholder="{{ _('delivery.subject_placeholder') }}" required>
+                    <input type="text" id="subject" name="subject" class="form-input" placeholder="{{ _('delivery.subject_placeholder') }}" required aria-describedby="subject_error">
+                    <p class="form-error" id="subject_error" hidden></p>
                 </div>
 
                 <div class="form-group">
@@ -52,45 +54,60 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label form-label--required">{{ _('delivery.document_to_send') }}</label>
-                    <div class="form-file">
-                        <input type="file" id="document" name="document" class="form-file-input" accept=".pdf,.doc,.docx,.odt" required>
+                    <label class="form-label form-label--required" id="document_label">{{ _('delivery.document_to_send') }}</label>
+                    <div class="form-file" id="file-drop-zone" aria-labelledby="document_label">
+                        <input type="file" id="document" name="document" class="form-file-input" accept=".pdf,.doc,.docx,.odt" required aria-describedby="document_hint document_error" data-max-size="10485760">
                         <label for="document" class="form-file-label">
                             <svg class="form-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
-                            <span class="form-file-text">
+                            <span class="form-file-text" id="file-upload-text">
                                 <strong>{{ _('delivery.document_upload_label') }}</strong><br>
                                 {{ _('delivery.document_upload_formats') }}
                             </span>
                         </label>
+                        <!-- File selected display -->
+                        <div class="form-file-selected" id="file-selected" hidden>
+                            <svg class="form-file-selected-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <div class="form-file-selected-info">
+                                <span class="form-file-selected-name" id="file-name"></span>
+                                <span class="form-file-selected-size" id="file-size"></span>
+                            </div>
+                            <button type="button" class="form-file-remove" id="file-remove" aria-label="{{ _('form.cancel') }}">
+                                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/></svg>
+                            </button>
+                        </div>
                     </div>
+                    <p class="form-hint" id="document_hint">{{ _('delivery.document_upload_formats') }}</p>
+                    <p class="form-error" id="document_error" hidden></p>
                 </div>
             </fieldset>
 
             <!-- Options Section -->
-            <fieldset style="border: none; padding: 0; margin: 0;">
-                <legend style="font-size: var(--text-lg); font-weight: var(--font-semibold); margin-bottom: var(--space-4);">
+            <fieldset class="form-fieldset form-fieldset--last">
+                <legend class="form-fieldset-legend">
                     {{ _('delivery.options') }}
                 </legend>
 
                 <div class="form-group">
                     <label class="form-label">{{ _('delivery.delivery_type') }}</label>
-                    <div style="display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2);">
-                        <label style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface-alt); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent;" class="radio-option">
-                            <input type="radio" name="delivery_type" value="standard" checked style="margin-top: 0.25rem;">
-                            <div>
-                                <span style="font-weight: var(--font-medium);">{{ _('delivery.delivery_type_standard') }}</span>
-                                <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-1);">
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" name="delivery_type" value="standard" checked>
+                            <div class="radio-option-content">
+                                <span class="radio-option-title">{{ _('delivery.delivery_type_standard') }}</span>
+                                <p class="radio-option-description">
                                     {{ _('delivery.delivery_type_standard_desc') }}
                                 </p>
                             </div>
                         </label>
-                        <label style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface-alt); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent;" class="radio-option">
-                            <input type="radio" name="delivery_type" value="urgent" style="margin-top: 0.25rem;">
-                            <div>
-                                <span style="font-weight: var(--font-medium);">{{ _('delivery.delivery_type_urgent') }}</span>
-                                <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: var(--space-1);">
+                        <label class="radio-option">
+                            <input type="radio" name="delivery_type" value="urgent">
+                            <div class="radio-option-content">
+                                <span class="radio-option-title">{{ _('delivery.delivery_type_urgent') }}</span>
+                                <p class="radio-option-description">
                                     {{ _('delivery.delivery_type_urgent_desc') }}
                                 </p>
                             </div>
@@ -100,13 +117,24 @@
             </fieldset>
         </div>
 
-        <div class="card-footer" style="display: flex; gap: var(--space-3); justify-content: flex-end;">
+        <div class="card-footer delivery-form-actions">
             <button type="button" class="btn btn--ghost" onclick="window.history.back()">{{ _('form.cancel') }}</button>
-            <button type="submit" name="action" value="draft" class="btn btn--secondary">{{ _('form.save_draft') }}</button>
-            <button type="submit" name="action" value="send" class="btn btn--primary">
-                <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
-                {{ _('form.send_now') }}
+            <button type="submit" name="action" value="draft" class="btn btn--secondary" id="btn-draft">{{ _('form.save_draft') }}</button>
+            <button type="submit" name="action" value="send" class="btn btn--primary" id="btn-send">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="btn-icon"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                <span class="btn-text">{{ _('form.send_now') }}</span>
+                <span class="btn-loading" hidden>
+                    <svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.42" stroke-linecap="round"/></svg>
+                </span>
             </button>
+        </div>
+
+        <!-- Progress overlay for form submission -->
+        <div class="form-progress-overlay" id="form-progress" hidden>
+            <div class="form-progress-content">
+                <svg class="spinner spinner--lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.42" stroke-linecap="round"/></svg>
+                <p class="form-progress-text" id="progress-text">{{ _('form.submit') }}...</p>
+            </div>
         </div>
     </form>
 
