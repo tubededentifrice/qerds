@@ -1,0 +1,73 @@
+# Test environment for QERDS
+#
+# Provides isolated database and object storage for tests.
+# Run with: docker compose -f docker/docker-compose.test.yml up -d
+#
+# Environment variables:
+#   TEST_DATABASE_URL=postgresql+psycopg://qerds:qerds_dev_password@localhost:5433/qerds_test
+#   TEST_S3_ENDPOINT=http://localhost:9002
+#   TEST_S3_ACCESS_KEY=qerds_minio
+#   TEST_S3_SECRET_KEY=qerds_minio_secret
+
+services:
+  # PostgreSQL 16 - Test database (separate from dev database)
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: qerds_test
+      POSTGRES_USER: qerds
+      POSTGRES_PASSWORD: qerds_dev_password
+    # Bind to localhost only (different port than dev instance)
+    ports:
+      - "127.0.0.1:5433:5432"
+    # Use tmpfs for test data to ensure fast cleanup and isolation
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qerds -d qerds_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # MinIO - S3-compatible object storage for test content blobs
+  minio-test:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: qerds_minio
+      MINIO_ROOT_PASSWORD: qerds_minio_secret
+    # Bind to localhost only (different ports than dev instance)
+    ports:
+      - "127.0.0.1:9002:9000"   # API
+      - "127.0.0.1:9003:9001"   # Console
+    # Use tmpfs for test data to ensure fast cleanup and isolation
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Mailpit - Email testing (captures all test emails)
+  mailpit-test:
+    image: axllent/mailpit:latest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    # Bind to localhost only (different ports than dev instance)
+    ports:
+      - "127.0.0.1:8026:8025"   # Web UI
+      - "127.0.0.1:1026:1025"   # SMTP
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  default:
+    name: qerds_test_network

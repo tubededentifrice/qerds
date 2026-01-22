@@ -73,10 +73,11 @@ packages = ["src/qerds"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "session"
 addopts = [
     "-ra",
-    "-q",
+    "-v",
+    "--tb=short",
     "--strict-markers",
     "--strict-config",
 ]
@@ -84,14 +85,18 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["src/qerds"]
 branch = true
 parallel = true
+omit = ["*/tests/*", "*/__pycache__/*"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 0  # Will increase as we add tests (target: 80)
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

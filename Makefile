@@ -1,7 +1,8 @@
 # QERDS Development Makefile
 # All commands should be run via Docker for reproducibility
 
-.PHONY: help install lint format typecheck test test-cov clean check-traceability
+.PHONY: help install lint format typecheck test test-cov clean check-traceability \
+       test-env-up test-env-down test-env-status test-docker test-docker-cov
 
 # Default target
 help:
@@ -21,6 +22,13 @@ help:
 	@echo "  make docker-format    Run formatter in Docker"
 	@echo "  make docker-test      Run tests in Docker"
 	@echo "  make docker-typecheck Run type checker in Docker"
+	@echo ""
+	@echo "Test environment:"
+	@echo "  make test-env-up      Start test containers (postgres, minio, mailpit)"
+	@echo "  make test-env-down    Stop test containers and remove volumes"
+	@echo "  make test-env-status  Show test container status"
+	@echo "  make test-docker      Run tests against test containers"
+	@echo "  make test-docker-cov  Run tests with coverage against test containers"
 	@echo ""
 	@echo "Quality gates (run all checks):"
 	@echo "  make check       Run all local checks"
@@ -74,6 +82,45 @@ docker-test-cov:
 	docker compose exec qerds-api pytest --cov --cov-report=term-missing
 
 docker-check: docker-lint docker-format-check docker-typecheck docker-test
+
+# ---------------------------------------------------------------------------
+# Test Environment (isolated test containers)
+# ---------------------------------------------------------------------------
+
+# Start test containers (separate from dev containers)
+test-env-up:
+	docker compose -f docker/docker-compose.test.yml up -d
+	@echo "Waiting for services to be healthy..."
+	@docker compose -f docker/docker-compose.test.yml ps
+	@sleep 5
+	@echo "Test environment ready."
+	@echo "  Postgres: localhost:5433"
+	@echo "  MinIO:    localhost:9002 (console: localhost:9003)"
+	@echo "  Mailpit:  localhost:8026 (SMTP: localhost:1026)"
+
+# Stop test containers and clean up
+test-env-down:
+	docker compose -f docker/docker-compose.test.yml down -v
+
+# Show test container status
+test-env-status:
+	docker compose -f docker/docker-compose.test.yml ps
+
+# Run tests against the test environment (requires test-env-up first)
+test-docker: test-env-up
+	TEST_DATABASE_URL=postgresql+psycopg://qerds:qerds_dev_password@localhost:5433/qerds_test \
+	TEST_S3_ENDPOINT=http://localhost:9002 \
+	TEST_S3_ACCESS_KEY=qerds_minio \
+	TEST_S3_SECRET_KEY=qerds_minio_secret \
+	pytest tests/
+
+# Run tests with coverage against the test environment
+test-docker-cov: test-env-up
+	TEST_DATABASE_URL=postgresql+psycopg://qerds:qerds_dev_password@localhost:5433/qerds_test \
+	TEST_S3_ENDPOINT=http://localhost:9002 \
+	TEST_S3_ACCESS_KEY=qerds_minio \
+	TEST_S3_SECRET_KEY=qerds_minio_secret \
+	pytest tests/ --cov=src/qerds --cov-report=term-missing --cov-report=html
 
 # Compliance targets (REQ-A04)
 check-traceability:
