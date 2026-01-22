@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if lang == 'fr' %}Lettre Recommandee Electronique{% else %}Electronic Registered Delivery{% endif %}</title>
+    <style>
+        /* Email-safe CSS */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #1a1a1a;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .email-header {
+            background-color: #000091;
+            padding: 24px;
+            text-align: center;
+        }
+        .email-header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .email-header p {
+            color: rgba(255,255,255,0.9);
+            margin: 8px 0 0 0;
+            font-size: 14px;
+        }
+        .email-body {
+            padding: 32px 24px;
+        }
+        .legal-notice {
+            background-color: #f0f0f5;
+            border-left: 4px solid #000091;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .legal-notice p {
+            margin: 0;
+            font-size: 14px;
+            color: #3a3a3a;
+        }
+        .delivery-info {
+            margin-bottom: 24px;
+        }
+        .delivery-info h2 {
+            color: #000091;
+            font-size: 18px;
+            margin: 0 0 16px 0;
+        }
+        .info-row {
+            display: flex;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #3a3a3a;
+            min-width: 140px;
+        }
+        .info-value {
+            color: #1a1a1a;
+        }
+        .deadline-box {
+            background-color: #fff8e6;
+            border: 2px solid #ffb612;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .deadline-box h3 {
+            color: #a56800;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .deadline-box .deadline-date {
+            font-size: 20px;
+            font-weight: 700;
+            color: #a56800;
+        }
+        .action-section {
+            text-align: center;
+            margin: 32px 0;
+        }
+        .action-button {
+            display: inline-block;
+            background-color: #000091;
+            color: #ffffff !important;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .action-button:hover {
+            background-color: #1212ff;
+        }
+        .action-note {
+            font-size: 14px;
+            color: #666666;
+            margin-top: 16px;
+        }
+        .privacy-notice {
+            background-color: #f5f5f5;
+            padding: 16px;
+            margin-top: 24px;
+            border-radius: 4px;
+        }
+        .privacy-notice h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #3a3a3a;
+        }
+        .privacy-notice p {
+            margin: 0;
+            font-size: 13px;
+            color: #666666;
+        }
+        .email-footer {
+            background-color: #f5f5f5;
+            padding: 24px;
+            text-align: center;
+            border-top: 1px solid #e5e5e5;
+        }
+        .email-footer p {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #666666;
+        }
+        .email-footer .provider-name {
+            font-weight: 600;
+            color: #000091;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="email-header">
+            <h1>{{ provider_name }}</h1>
+            {% if lang == 'fr' %}
+            <p>Service de Lettre Recommandee Electronique Qualifiee</p>
+            {% else %}
+            <p>Qualified Electronic Registered Delivery Service</p>
+            {% endif %}
+        </div>
+
+        <!-- Body -->
+        <div class="email-body">
+            <!-- Legal notice -->
+            <div class="legal-notice">
+                <p>{{ legal_nature }}</p>
+            </div>
+
+            <!-- Greeting -->
+            {% if lang == 'fr' %}
+            <p>Bonjour,</p>
+            <p>Vous avez recu une <strong>lettre recommandee electronique</strong> qui attend votre action.</p>
+            {% else %}
+            <p>Hello,</p>
+            <p>You have received an <strong>electronic registered delivery</strong> awaiting your action.</p>
+            {% endif %}
+
+            <!-- Delivery information -->
+            <div class="delivery-info">
+                {% if lang == 'fr' %}
+                <h2>Informations de l'envoi</h2>
+                {% else %}
+                <h2>Delivery Information</h2>
+                {% endif %}
+
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a; width: 140px;">
+                            {% if lang == 'fr' %}Reference{% else %}Reference{% endif %}
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
+                            <code style="background: #f0f0f5; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ delivery_ref }}</code>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
+                            {% if lang == 'fr' %}Operateur{% else %}Provider{% endif %}
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
+                            {{ provider_name }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
+                            {% if lang == 'fr' %}Nature{% else %}Type{% endif %}
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
+                            {% if lang == 'fr' %}Lettre Recommandee Electronique (LRE){% else %}Qualified Electronic Registered Delivery{% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Deadline warning -->
+            <div class="deadline-box">
+                {% if lang == 'fr' %}
+                <h3>Date limite pour accepter ou refuser</h3>
+                {% else %}
+                <h3>Deadline to accept or refuse</h3>
+                {% endif %}
+                <div class="deadline-date">{{ deadline_formatted }}</div>
+            </div>
+
+            <!-- Call to action -->
+            <div class="action-section">
+                <a href="{{ magic_link }}" class="action-button">
+                    {% if lang == 'fr' %}Consulter ma lettre recommandee{% else %}View my registered delivery{% endif %}
+                </a>
+                <p class="action-note">
+                    {% if lang == 'fr' %}
+                    Une authentification sera requise pour acceder au contenu.
+                    {% else %}
+                    Authentication will be required to access the content.
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Privacy notice - CPCE compliance: no sender info -->
+            <div class="privacy-notice">
+                {% if lang == 'fr' %}
+                <h4>Note de confidentialite</h4>
+                <p>
+                    Conformement a la reglementation, l'identite de l'expediteur et le contenu de l'envoi
+                    ne sont pas reveles dans cette notification. Ces informations seront accessibles apres
+                    votre authentification sur la plateforme securisee.
+                </p>
+                {% else %}
+                <h4>Privacy Notice</h4>
+                <p>
+                    In accordance with regulations, the sender's identity and delivery content are not
+                    disclosed in this notification. This information will be accessible after you
+                    authenticate on the secure platform.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="email-footer">
+            <p class="provider-name">{{ provider_name }}</p>
+            {% if lang == 'fr' %}
+            <p>Service de Lettre Recommandee Electronique Qualifiee conforme au reglement eIDAS et au CPCE.</p>
+            <p>Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.</p>
+            {% else %}
+            <p>Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.</p>
+            <p>This email was sent automatically. Please do not reply.</p>
+            {% endif %}
+            <p style="font-size: 11px; color: #999999; margin-top: 16px;">
+                Template v{{ template_version }}
+            </p>
+        </div>
+    </div>
+</body>
+</html>

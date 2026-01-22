@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if lang == 'fr' %}Rappel - Lettre Recommandee en attente{% else %}Reminder - Pending Registered Delivery{% endif %}</title>
+    <style>
+        /* Email-safe CSS */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #1a1a1a;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .email-header {
+            background-color: #a56800;
+            padding: 24px;
+            text-align: center;
+        }
+        .email-header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .email-header p {
+            color: rgba(255,255,255,0.9);
+            margin: 8px 0 0 0;
+            font-size: 14px;
+        }
+        .urgency-banner {
+            background-color: #fff3cd;
+            border-bottom: 3px solid #ffb612;
+            padding: 16px 24px;
+            text-align: center;
+        }
+        .urgency-banner p {
+            margin: 0;
+            color: #856404;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        .email-body {
+            padding: 32px 24px;
+        }
+        .legal-notice {
+            background-color: #f0f0f5;
+            border-left: 4px solid #000091;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .legal-notice p {
+            margin: 0;
+            font-size: 14px;
+            color: #3a3a3a;
+        }
+        .delivery-info {
+            margin-bottom: 24px;
+        }
+        .delivery-info h2 {
+            color: #000091;
+            font-size: 18px;
+            margin: 0 0 16px 0;
+        }
+        .deadline-box {
+            background-color: #ffe4e1;
+            border: 2px solid #e10600;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .deadline-box h3 {
+            color: #c00;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+        .deadline-box .deadline-date {
+            font-size: 20px;
+            font-weight: 700;
+            color: #c00;
+        }
+        .deadline-box .days-remaining {
+            font-size: 24px;
+            font-weight: 700;
+            color: #c00;
+            margin-top: 8px;
+        }
+        .action-section {
+            text-align: center;
+            margin: 32px 0;
+        }
+        .action-button {
+            display: inline-block;
+            background-color: #e10600;
+            color: #ffffff !important;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .action-button:hover {
+            background-color: #c00;
+        }
+        .action-note {
+            font-size: 14px;
+            color: #666666;
+            margin-top: 16px;
+        }
+        .expiry-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 16px;
+            margin-top: 24px;
+        }
+        .expiry-warning h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #856404;
+        }
+        .expiry-warning p {
+            margin: 0;
+            font-size: 13px;
+            color: #856404;
+        }
+        .privacy-notice {
+            background-color: #f5f5f5;
+            padding: 16px;
+            margin-top: 24px;
+            border-radius: 4px;
+        }
+        .privacy-notice h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #3a3a3a;
+        }
+        .privacy-notice p {
+            margin: 0;
+            font-size: 13px;
+            color: #666666;
+        }
+        .email-footer {
+            background-color: #f5f5f5;
+            padding: 24px;
+            text-align: center;
+            border-top: 1px solid #e5e5e5;
+        }
+        .email-footer p {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #666666;
+        }
+        .email-footer .provider-name {
+            font-weight: 600;
+            color: #000091;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="email-header">
+            <h1>{% if lang == 'fr' %}RAPPEL{% else %}REMINDER{% endif %}</h1>
+            {% if lang == 'fr' %}
+            <p>Lettre Recommandee Electronique en attente</p>
+            {% else %}
+            <p>Pending Electronic Registered Delivery</p>
+            {% endif %}
+        </div>
+
+        <!-- Urgency banner -->
+        <div class="urgency-banner">
+            {% if lang == 'fr' %}
+            <p>Action requise dans {{ days_remaining }} jour{% if days_remaining > 1 %}s{% endif %}</p>
+            {% else %}
+            <p>Action required within {{ days_remaining }} day{% if days_remaining > 1 %}s{% endif %}</p>
+            {% endif %}
+        </div>
+
+        <!-- Body -->
+        <div class="email-body">
+            <!-- Legal notice -->
+            <div class="legal-notice">
+                <p>{{ legal_nature }}</p>
+            </div>
+
+            <!-- Greeting -->
+            {% if lang == 'fr' %}
+            <p>Bonjour,</p>
+            <p>
+                Nous vous rappelons qu'une <strong>lettre recommandee electronique</strong>
+                est en attente de votre action. <strong>La date limite approche.</strong>
+            </p>
+            {% else %}
+            <p>Hello,</p>
+            <p>
+                This is a reminder that an <strong>electronic registered delivery</strong>
+                is awaiting your action. <strong>The deadline is approaching.</strong>
+            </p>
+            {% endif %}
+
+            <!-- Delivery information -->
+            <div class="delivery-info">
+                {% if lang == 'fr' %}
+                <h2>Informations de l'envoi</h2>
+                {% else %}
+                <h2>Delivery Information</h2>
+                {% endif %}
+
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a; width: 140px;">
+                            {% if lang == 'fr' %}Reference{% else %}Reference{% endif %}
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
+                            <code style="background: #f0f0f5; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ delivery_ref }}</code>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
+                            {% if lang == 'fr' %}Operateur{% else %}Provider{% endif %}
+                        </td>
+                        <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
+                            {{ provider_name }}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Deadline warning -->
+            <div class="deadline-box">
+                {% if lang == 'fr' %}
+                <h3>Date limite pour accepter ou refuser</h3>
+                {% else %}
+                <h3>Deadline to accept or refuse</h3>
+                {% endif %}
+                <div class="deadline-date">{{ deadline_formatted }}</div>
+                <div class="days-remaining">
+                    {% if lang == 'fr' %}
+                    {{ days_remaining }} jour{% if days_remaining > 1 %}s{% endif %} restant{% if days_remaining > 1 %}s{% endif %}
+                    {% else %}
+                    {{ days_remaining }} day{% if days_remaining > 1 %}s{% endif %} remaining
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Call to action -->
+            <div class="action-section">
+                <a href="{{ magic_link }}" class="action-button">
+                    {% if lang == 'fr' %}Agir maintenant{% else %}Take action now{% endif %}
+                </a>
+                <p class="action-note">
+                    {% if lang == 'fr' %}
+                    Une authentification sera requise pour acceder au contenu.
+                    {% else %}
+                    Authentication will be required to access the content.
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Expiry warning -->
+            <div class="expiry-warning">
+                {% if lang == 'fr' %}
+                <h4>Important : que se passe-t-il si je n'agis pas ?</h4>
+                <p>
+                    Si vous n'acceptez ni ne refusez cette lettre avant la date limite,
+                    elle sera consideree comme "negligee" conformement a la loi.
+                    L'expediteur sera informe que vous n'avez pas retire l'envoi.
+                </p>
+                {% else %}
+                <h4>Important: What happens if I don't act?</h4>
+                <p>
+                    If you neither accept nor refuse this delivery before the deadline,
+                    it will be marked as "expired" in accordance with the law.
+                    The sender will be notified that you did not collect the delivery.
+                </p>
+                {% endif %}
+            </div>
+
+            <!-- Privacy notice -->
+            <div class="privacy-notice">
+                {% if lang == 'fr' %}
+                <h4>Note de confidentialite</h4>
+                <p>
+                    Conformement a la reglementation, l'identite de l'expediteur et le contenu
+                    ne sont pas reveles dans cette notification.
+                </p>
+                {% else %}
+                <h4>Privacy Notice</h4>
+                <p>
+                    In accordance with regulations, the sender's identity and content
+                    are not disclosed in this notification.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="email-footer">
+            <p class="provider-name">{{ provider_name }}</p>
+            {% if lang == 'fr' %}
+            <p>Service de Lettre Recommandee Electronique Qualifiee conforme au reglement eIDAS et au CPCE.</p>
+            <p>Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.</p>
+            {% else %}
+            <p>Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.</p>
+            <p>This email was sent automatically. Please do not reply.</p>
+            {% endif %}
+            <p style="font-size: 11px; color: #999999; margin-top: 16px;">
+                Template v{{ template_version }}
+            </p>
+        </div>
+    </div>
+</body>
+</html>

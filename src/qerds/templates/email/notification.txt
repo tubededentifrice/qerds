@@ -1,0 +1,92 @@
+{% if lang == 'fr' %}
+================================================================================
+{{ provider_name }} - Service de Lettre Recommandee Electronique Qualifiee
+================================================================================
+
+{{ legal_nature }}
+
+--------------------------------------------------------------------------------
+
+Bonjour,
+
+Vous avez recu une LETTRE RECOMMANDEE ELECTRONIQUE qui attend votre action.
+
+INFORMATIONS DE L'ENVOI
+-----------------------
+Reference : {{ delivery_ref }}
+Operateur : {{ provider_name }}
+Nature    : Lettre Recommandee Electronique (LRE)
+
+DATE LIMITE POUR ACCEPTER OU REFUSER
+------------------------------------
+{{ deadline_formatted }}
+
+CONSULTER VOTRE LETTRE RECOMMANDEE
+----------------------------------
+Cliquez sur le lien suivant ou copiez-le dans votre navigateur :
+
+{{ magic_link }}
+
+Une authentification sera requise pour acceder au contenu.
+
+NOTE DE CONFIDENTIALITE
+-----------------------
+Conformement a la reglementation, l'identite de l'expediteur et le contenu
+de l'envoi ne sont pas reveles dans cette notification. Ces informations
+seront accessibles apres votre authentification sur la plateforme securisee.
+
+--------------------------------------------------------------------------------
+{{ provider_name }}
+Service de Lettre Recommandee Electronique Qualifiee conforme au reglement
+eIDAS et au CPCE.
+
+Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.
+
+Template v{{ template_version }}
+================================================================================
+{% else %}
+================================================================================
+{{ provider_name }} - Qualified Electronic Registered Delivery Service
+================================================================================
+
+{{ legal_nature }}
+
+--------------------------------------------------------------------------------
+
+Hello,
+
+You have received an ELECTRONIC REGISTERED DELIVERY awaiting your action.
+
+DELIVERY INFORMATION
+--------------------
+Reference : {{ delivery_ref }}
+Provider  : {{ provider_name }}
+Type      : Qualified Electronic Registered Delivery
+
+DEADLINE TO ACCEPT OR REFUSE
+----------------------------
+{{ deadline_formatted }}
+
+VIEW YOUR REGISTERED DELIVERY
+-----------------------------
+Click the following link or copy it into your browser:
+
+{{ magic_link }}
+
+Authentication will be required to access the content.
+
+PRIVACY NOTICE
+--------------
+In accordance with regulations, the sender's identity and delivery content
+are not disclosed in this notification. This information will be accessible
+after you authenticate on the secure platform.
+
+--------------------------------------------------------------------------------
+{{ provider_name }}
+Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.
+
+This email was sent automatically. Please do not reply.
+
+Template v{{ template_version }}
+================================================================================
+{% endif %}
