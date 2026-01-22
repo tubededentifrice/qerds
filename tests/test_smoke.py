@@ -27,6 +27,14 @@ class TestPackageImports:
 
         assert main.app is not None
 
+    def test_import_api_factory(self):
+        """Test that the API app factory can be imported."""
+        from qerds.api import create_app
+
+        assert create_app is not None
+        app = create_app()
+        assert app is not None
+
     def test_import_db_module(self):
         """Test that the database module can be imported."""
         from qerds import db

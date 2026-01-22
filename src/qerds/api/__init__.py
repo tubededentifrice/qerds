@@ -5,4 +5,154 @@ FastAPI application providing:
 - Delivery lifecycle state machine enforcement
 - Evidence creation orchestration
 - Authorization, audit logging, and export endpoints
+
+This module provides the app factory pattern for creating configured
+FastAPI instances suitable for testing and production deployment.
 """
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from qerds.api.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
+from qerds.api.routers import admin_router, recipient_router, sender_router, verify_router
+
+if TYPE_CHECKING:
+    from qerds.core.config import Settings
+
+logger = logging.getLogger(__name__)
+
+# Application metadata
+API_TITLE = "QERDS API"
+API_DESCRIPTION = """
+Qualified Electronic Registered Delivery Service API.
+
+## Namespaces
+
+- **/sender/** - Sender operations (authenticated)
+- **/recipient/** - Recipient portal operations (authenticated)
+- **/verify/** - Third-party verification (token-gated)
+- **/admin/** - Operational/admin endpoints (admin auth)
+
+## Documentation
+
+- OpenAPI spec: `/api/openapi.json`
+- Swagger UI: `/api/docs`
+- ReDoc: `/api/redoc`
+"""
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Create and configure a FastAPI application instance.
+
+    This factory function creates a fully configured FastAPI app with:
+    - API namespace routers mounted at appropriate prefixes
+    - Request ID middleware for distributed tracing
+    - Error handling middleware for consistent JSON responses
+    - CORS middleware (configurable via settings)
+    - OpenAPI documentation at /api/docs and /api/redoc
+
+    Args:
+        settings: Optional Settings instance. If not provided, uses
+            default development settings. Pass explicit settings for
+            testing or production configuration.
+
+    Returns:
+        Configured FastAPI application ready to serve requests.
+
+    Example:
+        # Basic usage
+        app = create_app()
+
+        # With custom settings
+        from qerds.core.config import Settings
+        settings = Settings(environment="production", ...)
+        app = create_app(settings)
+
+        # For testing
+        test_settings = Settings(environment="dev", debug=True)
+        app = create_app(test_settings)
+    """
+    # Determine version from settings or default
+    version = "0.1.0"
+    if settings:
+        version = settings.app_version
+
+    app = FastAPI(
+        title=API_TITLE,
+        description=API_DESCRIPTION,
+        version=version,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
+    )
+
+    # Store settings in app state for access in routes
+    app.state.settings = settings
+
+    # Add middleware (order matters - first added is outermost)
+    _add_middleware(app, settings)
+
+    # Include routers
+    _include_routers(app)
+
+    # Add root health endpoint
+    @app.get("/health", tags=["health"])
+    async def health_check() -> dict[str, str]:
+        """Health check endpoint for container orchestration.
+
+        Returns:
+            Status dictionary indicating the service is healthy.
+        """
+        return {"status": "healthy"}
+
+    logger.info("QERDS API application created (version=%s)", version)
+
+    return app
+
+
+def _add_middleware(app: FastAPI, settings: Settings | None) -> None:
+    """Add middleware to the application.
+
+    Args:
+        app: The FastAPI application instance.
+        settings: Optional settings for middleware configuration.
+    """
+    # Request ID middleware - adds X-Request-ID to all responses
+    app.add_middleware(RequestIDMiddleware)
+
+    # Error handler middleware - converts exceptions to JSON responses
+    app.add_middleware(ErrorHandlerMiddleware)
+
+    # CORS middleware - configure based on environment
+    # In development, allow localhost origins; in production, restrict appropriately
+    allowed_origins = ["http://localhost:3000", "http://localhost:8000"]
+    if settings and settings.is_production:
+        # In production, should be configured via settings
+        # For now, use restrictive defaults
+        allowed_origins = []
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
+    )
+
+
+def _include_routers(app: FastAPI) -> None:
+    """Include API namespace routers.
+
+    Args:
+        app: The FastAPI application instance.
+    """
+    app.include_router(sender_router)
+    app.include_router(recipient_router)
+    app.include_router(verify_router)
+    app.include_router(admin_router)
