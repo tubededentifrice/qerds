@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Preuve d'Acceptation - {{ delivery_id }}{% endblock %}
+
+{% block page_header %}Preuve d'Acceptation - {{ delivery_id }}{% endblock %}
+
+{% block content %}
+<h1 class="document-title">Preuve d'Acceptation</h1>
+<p class="document-subtitle">
+    Lettre recommandee electronique {% if is_qualified %}qualifiee{% else %}(mode developpement){% endif %}
+</p>
+
+<!-- Delivery Reference -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Reference de l'envoi</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-value text-mono">{{ delivery_id }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Date de depot</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Date d'acceptation</span>
+            <span class="info-value">{{ acceptance_timestamp|format_datetime if acceptance_timestamp else 'Non disponible' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Statut</span>
+            <span class="info-value">
+                <span class="status-badge status-badge--success">
+                    Accepte
+                </span>
+            </span>
+        </div>
+    </div>
+</section>
+
+<!-- Sender Information -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Expediteur</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Nom</span>
+            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+        </div>
+        {% if sender_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ sender_organization }}</span>
+        </div>
+        {% endif %}
+        {% if sender_email %}
+        <div class="info-row">
+            <span class="info-label">Email</span>
+            <span class="info-value">{{ sender_email }}</span>
+        </div>
+        {% endif %}
+        {% if sender_address %}
+        <div class="info-row">
+            <span class="info-label">Adresse</span>
+            <span class="info-value">{{ sender_address }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Recipient Information (revealed post-acceptance per CPCE) -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Destinataire</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Nom</span>
+            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+        </div>
+        {% if recipient_organization %}
+        <div class="info-row">
+            <span class="info-label">Organisation</span>
+            <span class="info-value">{{ recipient_organization }}</span>
+        </div>
+        {% endif %}
+        {% if recipient_email %}
+        <div class="info-row">
+            <span class="info-label">Email</span>
+            <span class="info-value">{{ recipient_email }}</span>
+        </div>
+        {% endif %}
+        {% if recipient_address %}
+        <div class="info-row">
+            <span class="info-label">Adresse</span>
+            <span class="info-value">{{ recipient_address }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Content Information -->
+{% if content_info %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Contenu de l'envoi</h2>
+    <div class="info-grid">
+        {% if content_info.subject %}
+        <div class="info-row">
+            <span class="info-label">Objet</span>
+            <span class="info-value">{{ content_info.subject }}</span>
+        </div>
+        {% endif %}
+        {% if content_info.document_count %}
+        <div class="info-row">
+            <span class="info-label">Nombre de documents</span>
+            <span class="info-value">{{ content_info.document_count }}</span>
+        </div>
+        {% endif %}
+        {% if content_info.total_size %}
+        <div class="info-row">
+            <span class="info-label">Taille totale</span>
+            <span class="info-value">{{ content_info.total_size }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Content Hash/Digest -->
+{% if content_hash %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Empreinte numerique du contenu</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Algorithme</span>
+            <span class="info-value">{{ hash_algorithm|default('SHA-256') }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Empreinte</span>
+            <span class="info-value crypto-data">{{ content_hash }}</span>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<!-- Provider Seal Section -->
+<section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
+    <h3 class="seal-title">
+        {% if is_qualified %}
+        Sceau electronique qualifie du prestataire
+        {% else %}
+        Sceau electronique (non qualifie - developpement)
+        {% endif %}
+    </h3>
+    <dl class="seal-details">
+        <dt>Prestataire</dt>
+        <dd>{{ provider_name|default('QERDS') }}</dd>
+
+        <dt>Algorithme de signature</dt>
+        <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
+
+        <dt>Horodatage de l'acceptation</dt>
+        <dd>{{ acceptance_timestamp|format_datetime if acceptance_timestamp else generated_at|format_datetime }}</dd>
+
+        {% if seal_id %}
+        <dt>Identifiant du sceau</dt>
+        <dd class="crypto-data">{{ seal_id }}</dd>
+        {% endif %}
+    </dl>
+</section>
+
+<!-- Timestamp Authority Information -->
+{% if timestamp_authority %}
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Autorite d'horodatage</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Nom de l'autorite</span>
+            <span class="info-value">{{ timestamp_authority.name|default('Non disponible') }}</span>
+        </div>
+        {% if timestamp_authority.policy_oid %}
+        <div class="info-row">
+            <span class="info-label">OID de politique</span>
+            <span class="info-value text-mono">{{ timestamp_authority.policy_oid }}</span>
+        </div>
+        {% endif %}
+        {% if timestamp_authority.serial_number %}
+        <div class="info-row">
+            <span class="info-label">Numero de serie</span>
+            <span class="info-value text-mono">{{ timestamp_authority.serial_number }}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Verification Instructions -->
+<section class="info-section avoid-break">
+    <h2 class="info-section-title">Verification de ce document</h2>
+    <div class="info-grid">
+        <div class="info-row">
+            <span class="info-label">Identifiant de preuve</span>
+            <span class="info-value text-mono">{{ proof_id|default(delivery_id) }}</span>
+        </div>
+        {% if verification_url %}
+        <div class="info-row">
+            <span class="info-label">URL de verification</span>
+            <span class="info-value">{{ verification_url }}</span>
+        </div>
+        {% endif %}
+    </div>
+    <p class="text-small text-muted mt-2">
+        Pour verifier l'authenticite de ce document, rendez-vous sur le portail de verification QERDS
+        et saisissez l'identifiant de preuve ci-dessus.
+    </p>
+</section>
+
+<!-- Qualification Label -->
+<section class="info-section avoid-break mt-4">
+    <div class="qualification-notice {% if is_qualified %}qualification-notice--qualified{% else %}qualification-notice--dev{% endif %}">
+        {% if is_qualified %}
+        <p><strong>Service qualifie eIDAS</strong></p>
+        <p class="text-small">
+            Cette preuve d'acceptation a ete emise par un service de lettre recommandee electronique
+            qualifie au sens du reglement (UE) n 910/2014 (eIDAS) et conforme aux dispositions du
+            Code des Postes et des Communications Electroniques (CPCE).
+        </p>
+        {% else %}
+        <p><strong>Mode developpement - Non qualifie</strong></p>
+        <p class="text-small">
+            Ce document a ete genere en mode developpement et n'a pas de valeur juridique.
+            Il ne constitue pas une preuve qualifiee au sens du reglement eIDAS.
+        </p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+
+{% block verification_info %}
+Pour verifier l'authenticite de ce document, utilisez le service de verification QERDS
+avec l'identifiant de preuve {{ proof_id|default(delivery_id) }}{% if verification_url %} ou consultez {{ verification_url }}{% endif %}.
+{% endblock %}

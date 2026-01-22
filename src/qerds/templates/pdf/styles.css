@@ -396,6 +396,37 @@ p {
 /* --------------------------------------------------------------------------
    Utility Classes
    -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   Qualification Notice (for proof documents)
+   -------------------------------------------------------------------------- */
+.qualification-notice {
+    padding: var(--space-3);
+    border-radius: 4px;
+    border: 1px solid var(--color-grey-300);
+    background-color: var(--color-grey-100);
+}
+
+.qualification-notice--qualified {
+    border-color: var(--color-success);
+    background-color: var(--color-success-light);
+}
+
+.qualification-notice--qualified p {
+    color: var(--color-success);
+}
+
+.qualification-notice--dev {
+    border-color: var(--color-warning);
+    background-color: var(--color-warning-light);
+}
+
+.qualification-notice--dev p {
+    color: var(--color-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Utility Classes
+   -------------------------------------------------------------------------- */
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 .text-muted { color: var(--text-secondary); }
