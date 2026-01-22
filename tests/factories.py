@@ -163,3 +163,51 @@ def create_audit_log_entry(
         "ip_address": "127.0.0.1",
         "user_agent": "pytest/test-client",
     }
+
+
+def create_job(
+    job_type: str = "notification_send",
+    status: str = "pending",
+    payload: dict | None = None,
+    run_at: datetime | None = None,
+    queue: str = "default",
+    priority: int = 100,
+    max_attempts: int = 3,
+    attempts: int = 0,
+    job_id: str | None = None,
+    correlation_id: str | None = None,
+) -> dict:
+    """Create a test job dict.
+
+    Args:
+        job_type: Type of job (notification_send, delivery_expire, etc.)
+        status: Job status (pending, running, completed, failed, cancelled)
+        payload: Job-specific data.
+        run_at: When the job should run. Defaults to now.
+        queue: Queue name for routing.
+        priority: Job priority (lower = higher priority).
+        max_attempts: Maximum retry attempts.
+        attempts: Current attempt count.
+        job_id: UUID of the job. Auto-generated if None.
+        correlation_id: Optional ID for tracing related jobs.
+
+    Returns:
+        Dict representing a job ready for tests.
+    """
+    now = datetime.now(UTC)
+    return {
+        "job_id": job_id or str(uuid4()),
+        "job_type": job_type,
+        "status": status,
+        "payload_json": payload,
+        "run_at": run_at or now,
+        "queue": queue,
+        "priority": priority,
+        "max_attempts": max_attempts,
+        "attempts": attempts,
+        "base_backoff_seconds": 60,
+        "lock_timeout_seconds": 300,
+        "correlation_id": correlation_id,
+        "created_at": now,
+        "updated_at": now,
+    }
