@@ -6,6 +6,7 @@ This module provides:
 - RetentionPolicyService: CRUD operations for retention policies
 - RetentionEnforcementService: Finding and processing expired artifacts
 - CPCE-compliant defaults with minimum 365-day retention for evidence
+- LRE-specific retention enforcement with legal minimum validation
 
 The French CPCE (Code des Postes et des Communications Électroniques)
 requires electronic registered mail providers to retain proof of delivery
@@ -34,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 # CPCE requires minimum 1 year retention for delivery proofs
 CPCE_MINIMUM_RETENTION_DAYS = 365
+
+# Artifact types that are subject to LRE legal minimums
+LRE_PROTECTED_ARTIFACT_TYPES = frozenset({"delivery", "evidence_object"})
 
 
 class ArtifactType(str, Enum):
@@ -145,10 +149,7 @@ class RetentionPolicyService:
             ArtifactType.DELIVERY.value,
             ArtifactType.EVIDENCE_OBJECT.value,
         }
-        if (
-            artifact_type in evidence_types
-            and retention_days < CPCE_MINIMUM_RETENTION_DAYS
-        ):
+        if artifact_type in evidence_types and retention_days < CPCE_MINIMUM_RETENTION_DAYS:
             raise CPCEViolationError(
                 f"CPCE requires minimum {CPCE_MINIMUM_RETENTION_DAYS} days retention "
                 f"for {artifact_type} artifacts. Requested: {retention_days} days."
@@ -187,9 +188,7 @@ class RetentionPolicyService:
         import uuid as uuid_module
 
         try:
-            policy_uuid = (
-                uuid_module.UUID(policy_id) if isinstance(policy_id, str) else policy_id
-            )
+            policy_uuid = uuid_module.UUID(policy_id) if isinstance(policy_id, str) else policy_id
         except ValueError:
             return None
 
@@ -220,24 +219,121 @@ class RetentionPolicyService:
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
-    async def deactivate_policy(self, policy_id: str) -> bool:
+    async def update_policy(
+        self,
+        policy_id: str,
+        *,
+        retention_days: int | None = None,
+        expiry_action: RetentionActionType | None = None,
+        description: str | None = None,
+        is_active: bool | None = None,
+        actor_id: str = "system",
+    ) -> RetentionPolicy:
+        """Update an existing retention policy with validation.
+
+        Enforces CPCE minimum retention for LRE-protected artifact types.
+        Changes are audit-logged for compliance tracking.
+
+        Args:
+            policy_id: The policy's UUID.
+            retention_days: New retention period (must meet legal minimum).
+            expiry_action: New expiry action (archive/delete).
+            description: New description.
+            is_active: New active state.
+            actor_id: Identity of admin making the change.
+
+        Returns:
+            The updated RetentionPolicy.
+
+        Raises:
+            PolicyNotFoundError: If policy does not exist.
+            CPCEViolationError: If new retention_days is below CPCE minimum
+                for LRE-protected artifacts.
+        """
+        policy = await self.get_policy(policy_id)
+        if not policy:
+            raise PolicyNotFoundError(f"Retention policy not found: {policy_id}")
+
+        changes: dict[str, Any] = {}
+        old_values: dict[str, Any] = {}
+
+        # Validate and apply retention_days change
+        if retention_days is not None and retention_days != policy.minimum_retention_days:
+            if (
+                policy.artifact_type in LRE_PROTECTED_ARTIFACT_TYPES
+                and retention_days < CPCE_MINIMUM_RETENTION_DAYS
+            ):
+                raise CPCEViolationError(
+                    f"Cannot reduce retention for {policy.artifact_type} below "
+                    f"CPCE minimum of {CPCE_MINIMUM_RETENTION_DAYS} days. "
+                    f"Requested: {retention_days} days."
+                )
+            old_values["minimum_retention_days"] = policy.minimum_retention_days
+            policy.minimum_retention_days = retention_days
+            changes["minimum_retention_days"] = retention_days
+
+        if expiry_action is not None and expiry_action != policy.expiry_action:
+            old_values["expiry_action"] = policy.expiry_action.value
+            policy.expiry_action = expiry_action
+            changes["expiry_action"] = expiry_action.value
+
+        if description is not None and description != policy.description:
+            old_values["description"] = policy.description
+            policy.description = description
+            changes["description"] = description
+
+        if is_active is not None and is_active != policy.is_active:
+            old_values["is_active"] = policy.is_active
+            policy.is_active = is_active
+            changes["is_active"] = is_active
+
+        if changes:
+            # Audit log the policy change for compliance (REQ-H02)
+            audit_service = AuditLogService(self._session)
+            await audit_service.append(
+                stream=AuditStream.OPS,
+                event_type=AuditEventType.CONFIG_CHANGED,
+                actor_type="admin",
+                actor_id=actor_id,
+                payload={
+                    "policy_id": str(policy.policy_id),
+                    "artifact_type": policy.artifact_type,
+                    "old_values": old_values,
+                    "new_values": changes,
+                },
+                summary={
+                    "action": "retention_policy_updated",
+                    "policy_id": str(policy.policy_id),
+                    "artifact_type": policy.artifact_type,
+                },
+            )
+
+            await self._session.flush()
+
+            logger.info(
+                "Updated retention policy: id=%s, changes=%s, actor=%s",
+                policy_id,
+                changes,
+                actor_id,
+            )
+
+        return policy
+
+    async def deactivate_policy(self, policy_id: str, *, actor_id: str = "system") -> bool:
         """Deactivate a retention policy.
 
         Args:
             policy_id: The policy's UUID.
+            actor_id: Identity of admin making the change.
 
         Returns:
             True if policy was deactivated, False if not found.
         """
-        policy = await self.get_policy(policy_id)
-        if not policy:
+        try:
+            await self.update_policy(policy_id, is_active=False, actor_id=actor_id)
+            return True
+        except PolicyNotFoundError:
             return False
-
-        policy.is_active = False
-        await self._session.flush()
-
-        logger.info("Deactivated retention policy: id=%s", policy_id)
-        return True
 
     def calculate_retention_deadline(
         self,
@@ -277,6 +373,44 @@ class RetentionPolicyService:
             CPCE_MINIMUM_RETENTION_DAYS,
         )
         return now >= deadline
+
+    def get_lre_minimum_retention_days(self, artifact_type: str) -> int | None:
+        """Get the legal minimum retention days for an artifact type.
+
+        For LRE-protected types (delivery, evidence_object), returns the
+        CPCE minimum of 365 days. For other types, returns None indicating
+        no legal minimum applies.
+
+        Args:
+            artifact_type: The artifact type to check.
+
+        Returns:
+            Minimum retention days for LRE types, None otherwise.
+        """
+        if artifact_type in LRE_PROTECTED_ARTIFACT_TYPES:
+            return CPCE_MINIMUM_RETENTION_DAYS
+        return None
+
+    def validate_retention_days(
+        self,
+        artifact_type: str,
+        retention_days: int,
+    ) -> None:
+        """Validate that retention_days meets legal minimums.
+
+        Args:
+            artifact_type: The artifact type.
+            retention_days: Proposed retention period.
+
+        Raises:
+            CPCEViolationError: If retention is below legal minimum.
+        """
+        minimum = self.get_lre_minimum_retention_days(artifact_type)
+        if minimum is not None and retention_days < minimum:
+            raise CPCEViolationError(
+                f"CPCE requires minimum {minimum} days retention for "
+                f"{artifact_type} artifacts. Requested: {retention_days} days."
+            )
 
 
 class RetentionEnforcementService:
@@ -344,6 +478,11 @@ class RetentionEnforcementService:
     ) -> RetentionActionResult:
         """Execute a retention action on an artifact.
 
+        For LRE-protected artifact types (delivery, evidence_object), this
+        method enforces the CPCE minimum retention of 365 days regardless
+        of policy settings. Attempting to delete an LRE artifact before
+        the minimum period results in an error.
+
         Args:
             artifact: The artifact to process.
             policy: The policy dictating the action.
@@ -352,8 +491,31 @@ class RetentionEnforcementService:
 
         Returns:
             RetentionActionResult with outcome details.
+
+        Note:
+            LRE-protected artifacts will fail with CPCEViolationError if
+            deletion is attempted before the 365-day minimum.
         """
         action_type = policy.expiry_action
+
+        # Enforce LRE minimum retention for protected artifact types (REQ-F05)
+        if artifact.artifact_type in LRE_PROTECTED_ARTIFACT_TYPES:
+            now = datetime.now(UTC)
+            lre_deadline = artifact.created_at + timedelta(days=CPCE_MINIMUM_RETENTION_DAYS)
+
+            if now < lre_deadline:
+                days_remaining = (lre_deadline - now).days
+                error_msg = (
+                    f"Cannot {action_type.value} LRE artifact {artifact.artifact_ref}: "
+                    f"CPCE requires {CPCE_MINIMUM_RETENTION_DAYS}-day minimum retention. "
+                    f"{days_remaining} days remaining until {lre_deadline.isoformat()}."
+                )
+                logger.warning(error_msg)
+                return RetentionActionResult(
+                    success=False,
+                    action_type=action_type,
+                    error_message=error_msg,
+                )
 
         if dry_run:
             logger.info(
@@ -449,9 +611,7 @@ class RetentionEnforcementService:
         # TODO: Implement actual archival to cold storage (S3 Glacier, etc.)
         # For now, return a placeholder reference
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-        archive_ref = (
-            f"archive/{artifact.artifact_type}/{timestamp}/{artifact.artifact_ref}"
-        )
+        archive_ref = f"archive/{artifact.artifact_type}/{timestamp}/{artifact.artifact_ref}"
 
         logger.info(
             "Archived artifact %s to %s",

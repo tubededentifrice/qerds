@@ -11,8 +11,19 @@ and business logic orchestration:
 - EvidenceSealer: Evidence object sealing and timestamping (REQ-B02, REQ-C02, REQ-C03)
 - PDFGenerator: PDF proof generation using WeasyPrint
 - QualificationService: Qualification claim guardrails (REQ-A01, REQ-G01, REQ-G02)
+- AlertingService: Security event alerting for incident detection (REQ-H04, REQ-D08)
 """
 
+from qerds.services.alerting import (
+    AlertChannel,
+    AlertEventType,
+    AlertingConfig,
+    AlertingService,
+    AlertPayload,
+    AlertResult,
+    AlertSeverity,
+    create_alerting_config_from_env,
+)
 from qerds.services.qualification import (
     QualificationContext,
     QualificationError,
@@ -21,8 +32,16 @@ from qerds.services.qualification import (
 )
 
 __all__ = [
+    "AlertChannel",
+    "AlertEventType",
+    "AlertPayload",
+    "AlertResult",
+    "AlertSeverity",
+    "AlertingConfig",
+    "AlertingService",
     "QualificationContext",
     "QualificationError",
     "QualificationService",
+    "create_alerting_config_from_env",
     "create_qualification_service",
 ]

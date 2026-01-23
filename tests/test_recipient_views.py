@@ -1,10 +1,12 @@
-"""Tests for recipient HTML views (refused and inbox pages).
+"""Tests for recipient HTML views (accepted, refused and inbox pages).
 
 Covers:
+- Accepted view template rendering (post-acceptance state)
 - Refused view template rendering
 - Inbox view template rendering with filters and pagination
 - i18n support for French and English
 - Responsive design patterns (via CSS class assertions)
+- Sender identity reveal post-acceptance (CPCE compliance)
 """
 
 from __future__ import annotations
@@ -32,6 +34,10 @@ def client() -> TestClient:
 class TestRecipientTemplateStructure:
     """Tests for recipient template file structure."""
 
+    def test_accepted_template_exists(self) -> None:
+        """Verify accepted.html template exists."""
+        assert (TEMPLATES_DIR / "recipient" / "accepted.html").exists()
+
     def test_refused_template_exists(self) -> None:
         """Verify refused.html template exists."""
         assert (TEMPLATES_DIR / "recipient" / "refused.html").exists()
@@ -39,6 +45,185 @@ class TestRecipientTemplateStructure:
     def test_inbox_template_exists(self) -> None:
         """Verify inbox.html template exists."""
         assert (TEMPLATES_DIR / "recipient" / "inbox.html").exists()
+
+
+# ---------------------------------------------------------------------------
+# Accepted View Tests
+# ---------------------------------------------------------------------------
+class TestAcceptedView:
+    """Tests for GET /recipient/accepted/{delivery_id} endpoint.
+
+    Post-acceptance view tests verify:
+    - Sender identity is revealed (CPCE compliance)
+    - Content download is available
+    - Proof download links work
+    - All delivery info is displayed
+    """
+
+    def test_accepted_page_renders(self, client: TestClient) -> None:
+        """Verify accepted page renders successfully."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_accepted_page_shows_success_hero(self, client: TestClient) -> None:
+        """Verify accepted page shows success hero with green styling."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Check for success-themed hero section
+        assert "pickup-hero" in response.text
+        # Check for success color (green)
+        assert "color-success" in response.text
+
+    def test_accepted_page_reveals_sender_identity(self, client: TestClient) -> None:
+        """Verify accepted page reveals sender identity per CPCE compliance.
+
+        Post-acceptance, the sender identity MUST be visible to the recipient.
+        This is a critical CPCE compliance requirement.
+        """
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Mock data should include sender name and email
+        assert "Entreprise ABC" in response.text
+        assert "contact@entreprise-abc.fr" in response.text
+
+    def test_accepted_page_shows_subject(self, client: TestClient) -> None:
+        """Verify accepted page shows delivery subject."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Mock data includes subject
+        assert "Document important" in response.text
+
+    def test_accepted_page_shows_deposit_date(self, client: TestClient) -> None:
+        """Verify accepted page shows deposit date."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should show deposit date label
+        content = response.text.lower()
+        assert "depot" in content or "deposit" in content
+
+    def test_accepted_page_shows_acceptance_date(self, client: TestClient) -> None:
+        """Verify accepted page shows acceptance date."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should show acceptance date label
+        content = response.text.lower()
+        assert "accepte" in content or "accepted" in content
+
+    def test_accepted_page_shows_reference_number(self, client: TestClient) -> None:
+        """Verify accepted page shows delivery reference/ID."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        assert "test-delivery-id" in response.text
+
+    def test_accepted_page_shows_content_download(self, client: TestClient) -> None:
+        """Verify accepted page has content download section."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have content download section
+        assert "content-download" in response.text
+        # Should have download button
+        assert "/deliveries/" in response.text and "/content" in response.text
+
+    def test_accepted_page_shows_content_filename(self, client: TestClient) -> None:
+        """Verify accepted page shows content filename."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Mock data includes content filename
+        assert "contrat-2024.pdf" in response.text
+
+    def test_accepted_page_shows_proof_downloads(self, client: TestClient) -> None:
+        """Verify accepted page has proof download links."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have acceptance proof download link
+        assert "/proofs/acceptance" in response.text
+
+    def test_accepted_page_shows_verify_authenticity_link(self, client: TestClient) -> None:
+        """Verify accepted page has link to verification portal."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have link to verify proof
+        assert "/verify" in response.text
+
+    def test_accepted_page_shows_conservation_notice(self, client: TestClient) -> None:
+        """Verify accepted page shows proof conservation notice."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have info alert about proof conservation
+        assert "alert--info" in response.text
+
+    def test_accepted_page_links_to_inbox(self, client: TestClient) -> None:
+        """Verify accepted page has link back to inbox."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have link to inbox
+        assert "/recipient/inbox" in response.text
+
+    def test_accepted_page_links_to_help(self, client: TestClient) -> None:
+        """Verify accepted page has link to help."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have link to help
+        assert "/help" in response.text
+
+    def test_accepted_page_english_language(self, client: TestClient) -> None:
+        """Verify accepted page can render in English."""
+        response = client.get("/recipient/accepted/test-delivery-id?lang=en")
+        assert response.status_code == 200
+        # English version should have "Accepted" text
+        assert "Accepted" in response.text or "accepted" in response.text.lower()
+
+    def test_accepted_page_uses_semantic_css_classes(self, client: TestClient) -> None:
+        """Verify accepted page uses semantic CSS classes per CLAUDE.md guidelines."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should use semantic class names, not utility classes
+        assert "pickup-hero" in response.text
+        assert "pickup-card" in response.text
+        assert "delivery-info-list" in response.text
+        assert "content-download" in response.text
+
+    def test_accepted_page_includes_main_css(self, client: TestClient) -> None:
+        """Verify accepted page includes main.css stylesheet."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        assert "/static/css/main.css" in response.text
+
+    def test_accepted_page_extends_base_template(self, client: TestClient) -> None:
+        """Verify accepted page extends base template with header/footer."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have QERDS branding from base template
+        assert "QERDS" in response.text
+        # Should have footer
+        assert "qerds-footer" in response.text
+
+    def test_accepted_page_download_button_primary(self, client: TestClient) -> None:
+        """Verify download document button uses primary styling."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have primary button for main download action
+        assert "btn--primary" in response.text
+
+    def test_accepted_page_proof_buttons_outline(self, client: TestClient) -> None:
+        """Verify proof download buttons use outline styling."""
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should have outline buttons for proofs
+        assert "btn--outline" in response.text
+
+    def test_accepted_page_i18n_translation_keys(self, client: TestClient) -> None:
+        """Verify accepted page uses proper i18n translation keys.
+
+        Template should NOT contain hardcoded French text, only i18n keys.
+        """
+        response = client.get("/recipient/accepted/test-delivery-id")
+        assert response.status_code == 200
+        # Should not have hardcoded French text that should be i18n
+        # The rendered page will have translated text, but should be consistent
+        # Check that template is rendering translations (not raw keys)
+        assert "_(" not in response.text  # No untranslated key references
 
 
 # ---------------------------------------------------------------------------

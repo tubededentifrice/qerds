@@ -264,6 +264,48 @@ class TrustSettings(BaseSettings):
     )
 
 
+class RetentionSettings(BaseSettings):
+    """Retention policy settings for CPCE/LRE compliance (REQ-F05, REQ-H02).
+
+    The French CPCE requires minimum 1-year retention for LRE delivery proofs.
+    These settings define the floor values that cannot be overridden by
+    per-artifact policies.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="QERDS_RETENTION__",
+        extra="ignore",
+    )
+
+    # CPCE requires 1 year minimum for LRE proofs (REQ-F05)
+    lre_proof_retention_days: Annotated[int, Field(ge=365)] = Field(
+        default=365,
+        description="Minimum retention days for LRE delivery proofs (CPCE minimum: 365)",
+    )
+    # Audit logs should be kept longer for compliance audits
+    audit_log_retention_days: Annotated[int, Field(ge=365)] = Field(
+        default=1825,
+        description="Retention days for audit logs (default: 5 years)",
+    )
+    # Content objects can have shorter retention after delivery completes
+    content_object_retention_days: Annotated[int, Field(ge=30)] = Field(
+        default=90,
+        description="Retention days for content objects after delivery",
+    )
+
+    @field_validator("lre_proof_retention_days")
+    @classmethod
+    def validate_lre_minimum(cls, v: int) -> int:
+        """Ensure LRE proof retention meets CPCE minimum of 365 days."""
+        if v < 365:
+            msg = (
+                "LRE proof retention must be at least 365 days per CPCE requirements. "
+                f"Got: {v} days."
+            )
+            raise ValueError(msg)
+        return v
+
+
 class CryptoSettings(BaseSettings):
     """Cryptographic algorithm configuration.
 
@@ -286,8 +328,8 @@ class CryptoSettings(BaseSettings):
         description="Hash algorithm for content digests",
     )
     signature_algorithm: str = Field(
-        default="Ed25519",
-        description="Digital signature algorithm",
+        default="ECDSA-P384",
+        description="Digital signature algorithm (ECDSA-P384 per ENISA recommendations)",
     )
     encryption_algorithm: str = Field(
         default="AES-256-GCM",
@@ -365,6 +407,7 @@ class Settings(BaseSettings):
     oidc: OIDCSettings = Field(default_factory=OIDCSettings)
     trust: TrustSettings = Field(default_factory=TrustSettings)
     crypto: CryptoSettings = Field(default_factory=CryptoSettings)
+    retention: RetentionSettings = Field(default_factory=RetentionSettings)
 
     # API settings
     api_host: str = Field(

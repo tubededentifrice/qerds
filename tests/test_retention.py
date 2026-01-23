@@ -225,11 +225,19 @@ class TestRetentionPolicyService:
         mock_policy = MagicMock()
         mock_policy.is_active = True
         mock_policy.policy_id = uuid.uuid4()
+        mock_policy.artifact_type = "content_object"
+        mock_policy.description = "Test"
+        mock_policy.minimum_retention_days = 90
+        mock_policy.expiry_action = RetentionActionType.DELETE
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_policy
         mock_session.execute.return_value = mock_result
 
-        result = await service.deactivate_policy(str(mock_policy.policy_id))
+        with patch("qerds.services.retention.AuditLogService") as mock_audit_cls:
+            mock_audit_service = AsyncMock()
+            mock_audit_cls.return_value = mock_audit_service
+
+            result = await service.deactivate_policy(str(mock_policy.policy_id))
 
         assert result is True
         assert mock_policy.is_active is False
@@ -369,9 +377,10 @@ class TestRetentionEnforcementService:
         """Dry run should succeed without making changes."""
         import uuid
 
+        # Use content_object which has no LRE minimum
         artifact = EligibleArtifact(
-            artifact_type="delivery",
-            artifact_ref="del-123",
+            artifact_type="content_object",
+            artifact_ref="co-123",
             created_at=datetime.now(UTC),
             retention_deadline=datetime.now(UTC),
         )
@@ -398,10 +407,11 @@ class TestRetentionEnforcementService:
         """Archive action should create archive reference."""
         import uuid
 
+        # Use delivery that is old enough to pass LRE minimum
         artifact = EligibleArtifact(
             artifact_type="delivery",
             artifact_ref="del-123",
-            created_at=datetime.now(UTC),
+            created_at=datetime.now(UTC) - timedelta(days=400),
             retention_deadline=datetime.now(UTC),
         )
         mock_policy = MagicMock()
@@ -427,9 +437,10 @@ class TestRetentionEnforcementService:
         service: RetentionEnforcementService,
         mock_session: AsyncMock,
     ) -> None:
-        """Delete action should succeed."""
+        """Delete action should succeed for non-LRE artifacts."""
         import uuid
 
+        # Content objects have no LRE minimum
         artifact = EligibleArtifact(
             artifact_type="content_object",
             artifact_ref="co-456",
@@ -494,9 +505,7 @@ class TestEnforceRetentionHandler:
     ) -> None:
         """Handler should return zeros when no policies exist."""
         with (
-            patch(
-                "qerds.worker.handlers.retention.RetentionPolicyService"
-            ) as mock_policy_cls,
+            patch("qerds.worker.handlers.retention.RetentionPolicyService") as mock_policy_cls,
             patch("qerds.worker.handlers.retention.RetentionEnforcementService"),
             patch("qerds.worker.handlers.retention.AuditLogService"),
         ):
@@ -521,9 +530,7 @@ class TestEnforceRetentionHandler:
         mock_job.payload_json = {"dry_run": True}
 
         with (
-            patch(
-                "qerds.worker.handlers.retention.RetentionPolicyService"
-            ) as mock_policy_cls,
+            patch("qerds.worker.handlers.retention.RetentionPolicyService") as mock_policy_cls,
             patch("qerds.worker.handlers.retention.RetentionEnforcementService"),
             patch("qerds.worker.handlers.retention.AuditLogService"),
         ):
@@ -559,24 +566,18 @@ class TestEnforceRetentionHandler:
         )
 
         with (
-            patch(
-                "qerds.worker.handlers.retention.RetentionPolicyService"
-            ) as mock_policy_cls,
+            patch("qerds.worker.handlers.retention.RetentionPolicyService") as mock_policy_cls,
             patch(
                 "qerds.worker.handlers.retention.RetentionEnforcementService"
             ) as mock_enforcement_cls,
-            patch(
-                "qerds.worker.handlers.retention.AuditLogService"
-            ) as mock_audit_cls,
+            patch("qerds.worker.handlers.retention.AuditLogService") as mock_audit_cls,
         ):
             mock_policy_service = AsyncMock()
             mock_policy_service.get_active_policies.return_value = [mock_policy]
             mock_policy_cls.return_value = mock_policy_service
 
             mock_enforcement_service = AsyncMock()
-            mock_enforcement_service.find_eligible_artifacts.return_value = [
-                mock_artifact
-            ]
+            mock_enforcement_service.find_eligible_artifacts.return_value = [mock_artifact]
             mock_enforcement_service.execute_action.return_value = mock_action_result
             mock_enforcement_cls.return_value = mock_enforcement_service
 
@@ -619,15 +620,11 @@ class TestEnforceRetentionHandler:
         )
 
         with (
-            patch(
-                "qerds.worker.handlers.retention.RetentionPolicyService"
-            ) as mock_policy_cls,
+            patch("qerds.worker.handlers.retention.RetentionPolicyService") as mock_policy_cls,
             patch(
                 "qerds.worker.handlers.retention.RetentionEnforcementService"
             ) as mock_enforcement_cls,
-            patch(
-                "qerds.worker.handlers.retention.AuditLogService"
-            ) as mock_audit_cls,
+            patch("qerds.worker.handlers.retention.AuditLogService") as mock_audit_cls,
         ):
             mock_policy_service = AsyncMock()
             mock_policy_service.get_active_policies.return_value = [mock_policy]
@@ -670,9 +667,7 @@ class TestCreateDefaultCPCEPolicies:
 
         policies = await create_default_cpce_policies(mock_session)
 
-        delivery_policies = [
-            p for p in policies if p.artifact_type == ArtifactType.DELIVERY.value
-        ]
+        delivery_policies = [p for p in policies if p.artifact_type == ArtifactType.DELIVERY.value]
         assert len(delivery_policies) == 1
         assert delivery_policies[0].minimum_retention_days >= 365
 
@@ -707,3 +702,412 @@ class TestRetentionActionType:
         """Verify retention action type values."""
         assert RetentionActionType.ARCHIVE.value == "archive"
         assert RetentionActionType.DELETE.value == "delete"
+
+
+class TestLRERetentionEnforcement:
+    """Tests for LRE-specific retention enforcement (REQ-F05).
+
+    These tests verify that LRE delivery proofs cannot be deleted
+    before the CPCE-mandated 1-year minimum retention period.
+    """
+
+    @pytest.fixture
+    def mock_session(self) -> AsyncMock:
+        """Create a mock database session."""
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.flush = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def enforcement_service(self, mock_session: AsyncMock) -> RetentionEnforcementService:
+        """Create enforcement service with mock session."""
+        return RetentionEnforcementService(mock_session)
+
+    @pytest.mark.asyncio
+    async def test_lre_delivery_cannot_be_deleted_before_one_year(
+        self,
+        enforcement_service: RetentionEnforcementService,
+    ) -> None:
+        """LRE delivery proofs must be retained for at least 365 days."""
+        import uuid
+
+        # Create a delivery artifact that is only 180 days old
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=180)
+
+        artifact = EligibleArtifact(
+            artifact_type="delivery",
+            artifact_ref=f"del-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now,  # Policy says it's eligible
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.policy_id = uuid.uuid4()
+
+        result = await enforcement_service.execute_action(
+            artifact=artifact,
+            policy=mock_policy,
+            dry_run=False,
+        )
+
+        # Should fail because CPCE requires 365-day minimum
+        assert result.success is False
+        assert "CPCE" in (result.error_message or "")
+        assert "365" in (result.error_message or "")
+
+    @pytest.mark.asyncio
+    async def test_lre_evidence_cannot_be_deleted_before_one_year(
+        self,
+        enforcement_service: RetentionEnforcementService,
+    ) -> None:
+        """LRE evidence objects must be retained for at least 365 days."""
+        import uuid
+
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=364)  # Just under 1 year
+
+        artifact = EligibleArtifact(
+            artifact_type="evidence_object",
+            artifact_ref=f"eo-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now,
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.policy_id = uuid.uuid4()
+
+        result = await enforcement_service.execute_action(
+            artifact=artifact,
+            policy=mock_policy,
+            dry_run=False,
+        )
+
+        # Should fail: 364 days is less than 365 required
+        assert result.success is False
+        assert "CPCE" in (result.error_message or "")
+
+    @pytest.mark.asyncio
+    async def test_lre_delivery_can_be_deleted_after_one_year(
+        self,
+        enforcement_service: RetentionEnforcementService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """LRE delivery proofs can be deleted after 365 days."""
+        import uuid
+
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=400)  # 400 days old
+
+        artifact = EligibleArtifact(
+            artifact_type="delivery",
+            artifact_ref=f"del-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now - timedelta(days=35),
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.policy_id = uuid.uuid4()
+
+        with patch.object(enforcement_service._audit_service, "append", new_callable=AsyncMock):
+            result = await enforcement_service.execute_action(
+                artifact=artifact,
+                policy=mock_policy,
+                dry_run=False,
+            )
+
+        # Should succeed: artifact is older than 365 days
+        assert result.success is True
+        assert result.action_type == RetentionActionType.DELETE
+
+    @pytest.mark.asyncio
+    async def test_lre_delivery_archive_allowed_before_one_year(
+        self,
+        enforcement_service: RetentionEnforcementService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """LRE artifacts can be archived (but not deleted) before 365 days."""
+        import uuid
+
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=100)  # Only 100 days old
+
+        artifact = EligibleArtifact(
+            artifact_type="delivery",
+            artifact_ref=f"del-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now,
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.ARCHIVE
+        mock_policy.policy_id = uuid.uuid4()
+
+        with patch.object(enforcement_service._audit_service, "append", new_callable=AsyncMock):
+            result = await enforcement_service.execute_action(
+                artifact=artifact,
+                policy=mock_policy,
+                dry_run=False,
+            )
+
+        # Archive should still fail for LRE-protected types before minimum
+        # because even archiving could lead to data loss
+        assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_non_lre_artifact_can_be_deleted_anytime(
+        self,
+        enforcement_service: RetentionEnforcementService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Non-LRE artifacts (content_object) have no minimum retention."""
+        import uuid
+
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=30)  # Only 30 days old
+
+        artifact = EligibleArtifact(
+            artifact_type="content_object",
+            artifact_ref=f"co-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now,
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.policy_id = uuid.uuid4()
+
+        with patch.object(enforcement_service._audit_service, "append", new_callable=AsyncMock):
+            result = await enforcement_service.execute_action(
+                artifact=artifact,
+                policy=mock_policy,
+                dry_run=False,
+            )
+
+        # Content objects have no legal minimum, should succeed
+        assert result.success is True
+        assert result.action_type == RetentionActionType.DELETE
+
+    @pytest.mark.asyncio
+    async def test_lre_enforcement_boundary_exactly_365_days(
+        self,
+        enforcement_service: RetentionEnforcementService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """LRE artifact exactly 365 days old should be deletable."""
+        import uuid
+
+        now = datetime.now(UTC)
+        created_at = now - timedelta(days=365)  # Exactly 365 days
+
+        artifact = EligibleArtifact(
+            artifact_type="delivery",
+            artifact_ref=f"del-{uuid.uuid4()}",
+            created_at=created_at,
+            retention_deadline=now,
+        )
+
+        mock_policy = MagicMock()
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.policy_id = uuid.uuid4()
+
+        with patch.object(enforcement_service._audit_service, "append", new_callable=AsyncMock):
+            result = await enforcement_service.execute_action(
+                artifact=artifact,
+                policy=mock_policy,
+                dry_run=False,
+            )
+
+        # Exactly 365 days should be allowed
+        assert result.success is True
+
+
+class TestRetentionPolicyUpdate:
+    """Tests for retention policy update with CPCE validation."""
+
+    @pytest.fixture
+    def mock_session(self) -> AsyncMock:
+        """Create a mock database session."""
+        session = AsyncMock()
+        session.add = MagicMock()
+        session.flush = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def service(self, mock_session: AsyncMock) -> RetentionPolicyService:
+        """Create service instance with mock session."""
+        return RetentionPolicyService(mock_session)
+
+    @pytest.mark.asyncio
+    async def test_update_policy_reduces_retention_below_cpce_minimum_fails(
+        self,
+        service: RetentionPolicyService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Updating LRE policy to < 365 days should fail."""
+        import uuid
+
+        mock_policy = MagicMock()
+        mock_policy.policy_id = uuid.uuid4()
+        mock_policy.artifact_type = "delivery"
+        mock_policy.minimum_retention_days = 400
+        mock_policy.expiry_action = RetentionActionType.ARCHIVE
+        mock_policy.description = "Original"
+        mock_policy.is_active = True
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_policy
+        mock_session.execute.return_value = mock_result
+
+        with pytest.raises(CPCEViolationError) as exc_info:
+            await service.update_policy(
+                str(mock_policy.policy_id),
+                retention_days=180,  # Below CPCE minimum
+            )
+
+        assert "365" in str(exc_info.value)
+        assert "delivery" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_update_policy_valid_change_succeeds(
+        self,
+        service: RetentionPolicyService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Updating LRE policy to >= 365 days should succeed."""
+        import uuid
+
+        mock_policy = MagicMock()
+        mock_policy.policy_id = uuid.uuid4()
+        mock_policy.artifact_type = "delivery"
+        mock_policy.minimum_retention_days = 365
+        mock_policy.expiry_action = RetentionActionType.ARCHIVE
+        mock_policy.description = "Original"
+        mock_policy.is_active = True
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_policy
+        mock_session.execute.return_value = mock_result
+
+        # Mock the audit service
+        with patch("qerds.services.retention.AuditLogService") as mock_audit_cls:
+            mock_audit_service = AsyncMock()
+            mock_audit_cls.return_value = mock_audit_service
+
+            result = await service.update_policy(
+                str(mock_policy.policy_id),
+                retention_days=400,  # Above CPCE minimum
+                actor_id="admin@example.com",
+            )
+
+        assert result.minimum_retention_days == 400
+        mock_audit_service.append.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_update_non_lre_policy_below_365_succeeds(
+        self,
+        service: RetentionPolicyService,
+        mock_session: AsyncMock,
+    ) -> None:
+        """Updating content_object policy to < 365 days should succeed."""
+        import uuid
+
+        mock_policy = MagicMock()
+        mock_policy.policy_id = uuid.uuid4()
+        mock_policy.artifact_type = "content_object"  # Not LRE-protected
+        mock_policy.minimum_retention_days = 90
+        mock_policy.expiry_action = RetentionActionType.DELETE
+        mock_policy.description = "Content cleanup"
+        mock_policy.is_active = True
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_policy
+        mock_session.execute.return_value = mock_result
+
+        with patch("qerds.services.retention.AuditLogService") as mock_audit_cls:
+            mock_audit_service = AsyncMock()
+            mock_audit_cls.return_value = mock_audit_service
+
+            result = await service.update_policy(
+                str(mock_policy.policy_id),
+                retention_days=30,  # Below 365 is OK for content_object
+            )
+
+        assert result.minimum_retention_days == 30
+
+
+class TestLREMinimumRetentionHelpers:
+    """Tests for LRE minimum retention helper methods."""
+
+    @pytest.fixture
+    def mock_session(self) -> AsyncMock:
+        """Create a mock database session."""
+        return AsyncMock()
+
+    @pytest.fixture
+    def service(self, mock_session: AsyncMock) -> RetentionPolicyService:
+        """Create service instance."""
+        return RetentionPolicyService(mock_session)
+
+    def test_get_lre_minimum_for_delivery(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Delivery artifacts should have 365-day minimum."""
+        minimum = service.get_lre_minimum_retention_days("delivery")
+        assert minimum == 365
+
+    def test_get_lre_minimum_for_evidence(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Evidence objects should have 365-day minimum."""
+        minimum = service.get_lre_minimum_retention_days("evidence_object")
+        assert minimum == 365
+
+    def test_get_lre_minimum_for_content(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Content objects should have no legal minimum."""
+        minimum = service.get_lre_minimum_retention_days("content_object")
+        assert minimum is None
+
+    def test_get_lre_minimum_for_audit_log(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Audit logs should have no CPCE minimum (but may have other requirements)."""
+        minimum = service.get_lre_minimum_retention_days("audit_log")
+        assert minimum is None
+
+    def test_validate_retention_days_delivery_valid(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Valid retention for delivery should not raise."""
+        # Should not raise
+        service.validate_retention_days("delivery", 365)
+        service.validate_retention_days("delivery", 500)
+
+    def test_validate_retention_days_delivery_invalid(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Invalid retention for delivery should raise CPCEViolationError."""
+        with pytest.raises(CPCEViolationError):
+            service.validate_retention_days("delivery", 364)
+
+    def test_validate_retention_days_content_any_value(
+        self,
+        service: RetentionPolicyService,
+    ) -> None:
+        """Content objects can have any retention period."""
+        # Should not raise for any value
+        service.validate_retention_days("content_object", 1)
+        service.validate_retention_days("content_object", 30)
+        service.validate_retention_days("content_object", 365)

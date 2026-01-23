@@ -526,6 +526,7 @@ class TestAuditEventTypes:
         ops_events = [
             AuditEventType.CONFIG_CHANGED,
             AuditEventType.CONFIG_SNAPSHOT,
+            AuditEventType.DEPLOYMENT_MARKER,
             AuditEventType.DEPLOYMENT_STARTED,
             AuditEventType.DEPLOYMENT_COMPLETED,
             AuditEventType.DEPLOYMENT_ROLLED_BACK,
@@ -538,6 +539,10 @@ class TestAuditEventTypes:
             AuditEventType.MAINTENANCE_COMPLETED,
         ]
         assert all(e.value for e in ops_events)
+
+    def test_deployment_marker_event_type(self):
+        """Deployment marker event type is defined for CI/CD integration."""
+        assert AuditEventType.DEPLOYMENT_MARKER.value == "deployment_marker"
 
 
 class TestChainVerificationResult:

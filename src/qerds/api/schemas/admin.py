@@ -266,6 +266,78 @@ class ConfigSnapshotResponse(BaseModel):
     doc_refs: dict[str, str] | None = Field(None, description="Document references")
 
 
+class DeploymentMarkerRequest(BaseModel):
+    """Request schema for recording a deployment marker.
+
+    CI/CD pipelines call this endpoint after deployment to create an
+    audit record of the deployment event for change management compliance.
+    """
+
+    version: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Application version being deployed (e.g., 'v1.2.3')",
+    )
+    git_sha: str = Field(
+        ...,
+        min_length=7,
+        max_length=40,
+        pattern=r"^[a-fA-F0-9]+$",
+        description="Git commit SHA (short or full)",
+    )
+    deployer: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Identity of deployer (CI system, user, etc.)",
+    )
+    environment: str = Field(
+        "production",
+        pattern=r"^[a-z0-9_-]+$",
+        max_length=50,
+        description="Target environment (production, staging, etc.)",
+    )
+    details: dict[str, Any] | None = Field(
+        None,
+        description="Additional deployment metadata (pipeline URL, build number, etc.)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DeploymentMarkerResponse(BaseModel):
+    """Response schema for deployment marker creation."""
+
+    marker_id: UUID = Field(..., description="Unique identifier for the deployment marker")
+    version: str = Field(..., description="Deployed version")
+    git_sha: str = Field(..., description="Git commit SHA")
+    deployer: str = Field(..., description="Who deployed")
+    environment: str = Field(..., description="Target environment")
+    recorded_at: datetime = Field(..., description="When the marker was recorded")
+    audit_record_id: UUID = Field(..., description="ID of the audit log entry")
+
+
+class ConfigChangeEvent(BaseModel):
+    """Represents a configuration change event for audit purposes.
+
+    Used internally to structure config change audit records.
+    Includes value redaction for sensitive settings.
+    """
+
+    config_key: str = Field(..., description="Configuration key that changed")
+    old_value: str | None = Field(None, description="Previous value (redacted if sensitive)")
+    new_value: str | None = Field(None, description="New value (redacted if sensitive)")
+    change_type: str = Field(
+        "update",
+        pattern=r"^(create|update|delete)$",
+        description="Type of change",
+    )
+    is_sensitive: bool = Field(False, description="Whether values were redacted")
+    changed_by: str = Field(..., description="Actor who made the change")
+    changed_at: datetime = Field(..., description="When the change occurred")
+
+
 # -----------------------------------------------------------------------------
 # Access Review Export Schemas (REQ-H06)
 # -----------------------------------------------------------------------------
@@ -318,6 +390,76 @@ class AccessReviewExportResponse(BaseModel):
     )
     permission_changes: list[PermissionChangeRecord] = Field(
         default_factory=list, description="History of permission changes from audit log"
+    )
+
+
+class UserAccessReviewEntry(BaseModel):
+    """User entry for access review report (REQ-H06, REQ-D02).
+
+    Contains all user data needed for periodic compliance access reviews,
+    including roles, permissions, MFA status, and account status.
+    """
+
+    user_id: UUID = Field(..., description="User unique identifier")
+    username: str = Field(..., description="Username for login")
+    email: str = Field(..., description="User email address")
+    display_name: str = Field(..., description="User display name")
+    created_at: datetime = Field(..., description="Account creation timestamp")
+    last_login_at: datetime | None = Field(None, description="Last successful login timestamp")
+    last_activity_at: datetime | None = Field(
+        None, description="Last recorded activity (login or API use)"
+    )
+    is_active: bool = Field(..., description="Whether account is enabled")
+    is_superuser: bool = Field(..., description="Whether user has superuser privileges")
+    mfa_enabled: bool = Field(..., description="Whether MFA is enabled for this account")
+    account_locked: bool = Field(..., description="Whether account is currently locked")
+    locked_until: datetime | None = Field(None, description="Lock expiration timestamp if locked")
+    failed_login_count: int = Field(0, description="Number of consecutive failed login attempts")
+    password_changed_at: datetime | None = Field(None, description="Last password change timestamp")
+    external_provider: str | None = Field(None, description="External IdP if using SSO")
+    roles: list[str] = Field(default_factory=list, description="Assigned role names")
+    permissions: list[str] = Field(default_factory=list, description="Effective permissions")
+
+
+class ApiClientAccessReviewEntry(BaseModel):
+    """API client entry for access review report (REQ-H06, REQ-D02).
+
+    Contains all API client data needed for periodic compliance access reviews.
+    """
+
+    client_id: UUID = Field(..., description="API client unique identifier")
+    client_name: str = Field(..., description="API client name")
+    client_identifier: str = Field(..., description="API client ID used for authentication")
+    description: str | None = Field(None, description="Client description")
+    created_at: datetime = Field(..., description="Client creation timestamp")
+    last_used_at: datetime | None = Field(None, description="Last API usage timestamp")
+    is_active: bool = Field(..., description="Whether client is enabled")
+    expires_at: datetime | None = Field(None, description="Client expiration timestamp if set")
+    rate_limit_per_minute: int | None = Field(None, description="Rate limit if set")
+    allowed_ips: list[str] | None = Field(None, description="IP allowlist if set")
+    roles: list[str] = Field(default_factory=list, description="Assigned role names")
+    permissions: list[str] = Field(default_factory=list, description="Effective permissions")
+
+
+class AccessReviewReportResponse(BaseModel):
+    """Response schema for access review report (REQ-H06, REQ-D02).
+
+    User-centric access review report with all data needed for compliance reviews.
+    Includes filtering metadata and supports CSV export via format parameter.
+    """
+
+    generated_at: datetime = Field(..., description="Report generation timestamp")
+    generated_by: str = Field(..., description="Admin user who generated the report")
+    filters_applied: dict[str, Any] = Field(
+        default_factory=dict, description="Filters that were applied to the report"
+    )
+    total_users: int = Field(..., description="Total admin users in report")
+    total_clients: int = Field(..., description="Total API clients in report")
+    users: list[UserAccessReviewEntry] = Field(..., description="Admin user entries")
+    clients: list[ApiClientAccessReviewEntry] = Field(..., description="API client entries")
+    summary: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Summary statistics (active counts, MFA adoption, etc.)",
     )
 
 
@@ -998,3 +1140,183 @@ class RemediationStatusUpdateRequest(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+# -----------------------------------------------------------------------------
+# Vulnerability Finding Schemas (REQ-H09)
+# -----------------------------------------------------------------------------
+
+
+class VulnerabilityFindingCreate(BaseModel):
+    """Request schema for creating a vulnerability finding.
+
+    Used when manually creating findings or importing from scanner output.
+    """
+
+    source: str = Field(
+        ...,
+        pattern=r"^(trivy|grype|pentest|manual|dependency_check|sast|dast)$",
+        description="Source of the finding",
+    )
+    external_finding_id: str | None = Field(
+        None,
+        max_length=255,
+        description="External ID from source tool (e.g., CVE-2024-1234)",
+    )
+    severity: str = Field(
+        ...,
+        pattern=r"^(critical|high|medium|low|informational)$",
+        description="Severity level",
+    )
+    title: str = Field(
+        ...,
+        min_length=5,
+        max_length=500,
+        description="Finding title",
+    )
+    description: str | None = Field(
+        None,
+        max_length=10000,
+        description="Detailed description",
+    )
+    affected_component: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Affected component (e.g., 'api:latest', 'postgresql:15')",
+    )
+    discovered_at: datetime | None = Field(
+        None,
+        description="When the finding was discovered (defaults to now)",
+    )
+    cvss_score: float | None = Field(
+        None,
+        ge=0.0,
+        le=10.0,
+        description="CVSS score (0.0-10.0)",
+    )
+    cve_id: str | None = Field(
+        None,
+        pattern=r"^CVE-\d{4}-\d+$",
+        description="CVE identifier (e.g., CVE-2024-1234)",
+    )
+    source_evidence_id: UUID | None = Field(
+        None,
+        description="Link to source vulnerability evidence artifact",
+    )
+    extra_metadata: dict[str, Any] | None = Field(
+        None,
+        description="Additional metadata from scanner",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class VulnerabilityFindingBulkImport(BaseModel):
+    """Request schema for bulk importing findings from scanner JSON.
+
+    Supports Trivy JSON format for bulk import.
+    """
+
+    source: str = Field(
+        "trivy",
+        pattern=r"^(trivy|grype|dependency_check)$",
+        description="Scanner source for the import",
+    )
+    source_evidence_id: UUID | None = Field(
+        None,
+        description="Link to the scan report artifact",
+    )
+    findings: list[dict[str, Any]] = Field(
+        ...,
+        min_length=1,
+        description="List of findings in scanner-native format",
+    )
+    affected_component: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Common affected component for all findings",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class VulnerabilityFindingUpdate(BaseModel):
+    """Request schema for updating a vulnerability finding status/remediation."""
+
+    status: str | None = Field(
+        None,
+        pattern=r"^(open|in_progress|remediated|excepted|false_positive)$",
+        description="New status",
+    )
+    remediation_notes: str | None = Field(
+        None,
+        max_length=10000,
+        description="Remediation notes",
+    )
+    exception_reason: str | None = Field(
+        None,
+        max_length=5000,
+        description="Reason for exception (required if status is 'excepted')",
+    )
+    exception_expires: datetime | None = Field(
+        None,
+        description="When the exception expires",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class VulnerabilityFindingResponse(BaseModel):
+    """Response schema for a vulnerability finding."""
+
+    finding_id: UUID = Field(..., description="Unique finding identifier")
+    created_at: datetime = Field(..., description="When the record was created")
+    source: str = Field(..., description="Source of the finding")
+    external_finding_id: str | None = Field(None, description="External ID from source")
+    severity: str = Field(..., description="Severity level")
+    status: str = Field(..., description="Current status")
+    title: str = Field(..., description="Finding title")
+    description: str | None = Field(None, description="Detailed description")
+    affected_component: str = Field(..., description="Affected component")
+    discovered_at: datetime = Field(..., description="When discovered")
+    remediated_at: datetime | None = Field(None, description="When remediated")
+    remediation_notes: str | None = Field(None, description="Remediation notes")
+    exception_approved_by: UUID | None = Field(None, description="Who approved exception")
+    exception_reason: str | None = Field(None, description="Exception reason")
+    exception_expires: datetime | None = Field(None, description="Exception expiration")
+    source_evidence_id: UUID | None = Field(None, description="Source artifact ID")
+    cvss_score: float | None = Field(None, description="CVSS score")
+    cve_id: str | None = Field(None, description="CVE identifier")
+    extra_metadata: dict[str, Any] | None = Field(None, description="Extra metadata")
+
+
+class VulnerabilityFindingListResponse(BaseModel):
+    """Response schema for listing vulnerability findings."""
+
+    total: int = Field(..., description="Total matching findings")
+    findings: list[VulnerabilityFindingResponse] = Field(..., description="Findings list")
+
+
+class VulnerabilityFindingExport(BaseModel):
+    """Response schema for audit-ready vulnerability finding export."""
+
+    exported_at: datetime = Field(..., description="Export timestamp")
+    exported_by: str = Field(..., description="Admin who exported")
+    total_findings: int = Field(..., description="Total findings in export")
+    by_severity: dict[str, int] = Field(default_factory=dict, description="Count by severity")
+    by_status: dict[str, int] = Field(default_factory=dict, description="Count by status")
+    by_source: dict[str, int] = Field(default_factory=dict, description="Count by source")
+    findings: list[VulnerabilityFindingResponse] = Field(..., description="All findings")
+    export_hash: str = Field(..., description="SHA-256 hash of export contents")
+
+
+class VulnerabilityFindingBulkImportResponse(BaseModel):
+    """Response schema for bulk import operation."""
+
+    imported_count: int = Field(..., description="Number of findings imported")
+    skipped_count: int = Field(0, description="Number of duplicates skipped")
+    error_count: int = Field(0, description="Number of errors")
+    findings: list[VulnerabilityFindingResponse] = Field(..., description="Imported findings")
+    errors: list[str] = Field(default_factory=list, description="Error messages")

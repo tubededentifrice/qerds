@@ -21,6 +21,7 @@ from qerds.db.models.jobs import Job
 from qerds.db.models.parties import Party, RecipientConsent, SenderProofing
 from qerds.db.models.retention import RetentionAction, RetentionPolicy
 from qerds.db.models.session import Session
+from qerds.db.models.vulnerability import VulnerabilityFinding
 
 __all__ = [
     "AdminUser",
@@ -42,5 +43,6 @@ __all__ = [
     "RoleBinding",
     "SenderProofing",
     "Session",
+    "VulnerabilityFinding",
     "metadata",
 ]

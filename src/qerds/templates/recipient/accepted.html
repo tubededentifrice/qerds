@@ -71,7 +71,7 @@
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 <p class="content-download-name">{{ delivery.content_filename or 'document.pdf' }}</p>
-                <p class="content-download-meta">PDF {{ delivery.content_size or '1.2 Mo' }}</p>
+                <p class="content-download-meta">PDF &bull; {{ delivery.content_size or '1.2 Mo' }}</p>
                 <a href="/recipient/deliveries/{{ delivery.id }}/content" class="btn btn--primary btn--lg">
                     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/></svg>
                     {{ _('accepted.download_document') }}
@@ -84,7 +84,7 @@
                 {{ _('accepted.available_proofs') }}
             </h3>
             <div style="display: flex; flex-direction: column; gap: var(--space-2);">
-                <a href="/recipient/deliveries/{{ delivery.id }}/proof/reception" class="btn btn--outline btn--block" style="justify-content: flex-start; gap: var(--space-3);">
+                <a href="/recipient/deliveries/{{ delivery.id }}/proofs/acceptance" class="btn btn--outline btn--block" style="justify-content: flex-start; gap: var(--space-3);">
                     <svg viewBox="0 0 20 20" fill="currentColor" style="width: 1.25rem; height: 1.25rem; color: var(--color-success);">
                         <path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"/>
                     </svg>
@@ -117,7 +117,7 @@
     </div>
 
     <p class="text-center" style="font-size: var(--text-sm); color: var(--text-tertiary); max-width: 32rem; margin: var(--space-8) auto;">
-        <a href="/recipient/inbox">{{ _('accepted.view_other_mail') }}</a> |
+        <a href="/recipient/inbox">{{ _('accepted.view_other_mail') }}</a> &bull;
         <a href="/help">{{ _('accepted.help') }}</a>
     </p>
 </div>

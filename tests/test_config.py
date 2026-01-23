@@ -21,6 +21,7 @@ from qerds.core.config import (
     DatabaseSettings,
     Environment,
     OIDCSettings,
+    RetentionSettings,
     S3Settings,
     Settings,
     SMTPSettings,
@@ -303,7 +304,7 @@ class TestCryptoSettings:
         settings = CryptoSettings()
         assert settings.config_version == "2026.1"
         assert settings.hash_algorithm == "sha256"
-        assert settings.signature_algorithm == "Ed25519"
+        assert settings.signature_algorithm == "ECDSA-P384"  # ENISA recommended, matches trust.py
         assert settings.encryption_algorithm == "AES-256-GCM"
 
     def test_crypto_settings_valid_hash_algorithms(self):
@@ -616,3 +617,64 @@ class TestRequireProduction:
         with patch.dict(os.environ, production_env, clear=False):
             # Should not raise
             require_production()
+
+
+class TestRetentionSettings:
+    """Tests for RetentionSettings (REQ-F05, REQ-H02)."""
+
+    def test_retention_settings_defaults(self):
+        """Test retention settings default values meet CPCE requirements."""
+        settings = RetentionSettings()
+        # CPCE requires 365 days minimum for LRE proofs
+        assert settings.lre_proof_retention_days >= 365
+        assert settings.lre_proof_retention_days == 365  # Default is minimum
+        # Audit logs should have longer retention
+        assert settings.audit_log_retention_days == 1825  # 5 years
+        # Content objects can have shorter retention
+        assert settings.content_object_retention_days == 90
+
+    def test_retention_settings_from_env(self):
+        """Test loading retention settings from environment."""
+        with patch.dict(
+            os.environ,
+            {
+                "QERDS_RETENTION__LRE_PROOF_RETENTION_DAYS": "400",
+                "QERDS_RETENTION__AUDIT_LOG_RETENTION_DAYS": "2555",
+                "QERDS_RETENTION__CONTENT_OBJECT_RETENTION_DAYS": "60",
+            },
+            clear=False,
+        ):
+            settings = RetentionSettings()
+            assert settings.lre_proof_retention_days == 400
+            assert settings.audit_log_retention_days == 2555
+            assert settings.content_object_retention_days == 60
+
+    def test_retention_lre_proof_below_cpce_minimum_rejected(self):
+        """Test that LRE proof retention below 365 days is rejected."""
+        with patch.dict(
+            os.environ,
+            {"QERDS_RETENTION__LRE_PROOF_RETENTION_DAYS": "364"},
+            clear=False,
+        ):
+            with pytest.raises(ValidationError) as exc_info:
+                RetentionSettings()
+            # The error should mention the CPCE minimum
+            assert "365" in str(exc_info.value) or "greater than or equal" in str(exc_info.value)
+
+    def test_retention_lre_proof_exactly_365_accepted(self):
+        """Test that LRE proof retention of exactly 365 days is accepted."""
+        with patch.dict(
+            os.environ,
+            {"QERDS_RETENTION__LRE_PROOF_RETENTION_DAYS": "365"},
+            clear=False,
+        ):
+            settings = RetentionSettings()
+            assert settings.lre_proof_retention_days == 365
+
+    def test_retention_settings_in_main_settings(self, minimal_env):
+        """Test that retention settings are included in main Settings."""
+        with patch.dict(os.environ, minimal_env, clear=False):
+            settings = Settings()
+            assert hasattr(settings, "retention")
+            assert isinstance(settings.retention, RetentionSettings)
+            assert settings.retention.lre_proof_retention_days >= 365

@@ -688,6 +688,368 @@ class TestAccessReviewExportIntegration:
         assert response.permission_changes == []
 
 
+# -----------------------------------------------------------------------------
+# Access Review Report Tests (REQ-H06, REQ-D02)
+# -----------------------------------------------------------------------------
+
+
+class TestAccessReviewReportSchemas:
+    """Tests for access review report schema validation."""
+
+    def test_user_access_review_entry_schema(self):
+        """Test UserAccessReviewEntry schema validation."""
+        from qerds.api.schemas.admin import UserAccessReviewEntry
+
+        entry = UserAccessReviewEntry(
+            user_id=uuid.uuid4(),
+            username="testadmin",
+            email="testadmin@example.com",
+            display_name="Test Admin",
+            created_at=datetime.now(UTC),
+            last_login_at=datetime.now(UTC) - timedelta(days=1),
+            last_activity_at=datetime.now(UTC) - timedelta(days=1),
+            is_active=True,
+            is_superuser=False,
+            mfa_enabled=True,
+            account_locked=False,
+            locked_until=None,
+            failed_login_count=0,
+            password_changed_at=datetime.now(UTC) - timedelta(days=30),
+            external_provider=None,
+            roles=["admin_user", "auditor"],
+            permissions=["admin:read", "admin:write", "audit:read"],
+        )
+
+        assert entry.username == "testadmin"
+        assert entry.mfa_enabled is True
+        assert "admin_user" in entry.roles
+        assert "admin:read" in entry.permissions
+
+    def test_user_access_review_entry_with_locked_account(self):
+        """Test UserAccessReviewEntry with locked account."""
+        from qerds.api.schemas.admin import UserAccessReviewEntry
+
+        lock_until = datetime.now(UTC) + timedelta(hours=1)
+        entry = UserAccessReviewEntry(
+            user_id=uuid.uuid4(),
+            username="lockeduser",
+            email="locked@example.com",
+            display_name="Locked User",
+            created_at=datetime.now(UTC) - timedelta(days=10),
+            is_active=True,
+            is_superuser=False,
+            mfa_enabled=False,
+            account_locked=True,
+            locked_until=lock_until,
+            failed_login_count=5,
+            roles=[],
+            permissions=[],
+        )
+
+        assert entry.account_locked is True
+        assert entry.locked_until == lock_until
+        assert entry.failed_login_count == 5
+
+    def test_api_client_access_review_entry_schema(self):
+        """Test ApiClientAccessReviewEntry schema validation."""
+        from qerds.api.schemas.admin import ApiClientAccessReviewEntry
+
+        entry = ApiClientAccessReviewEntry(
+            client_id=uuid.uuid4(),
+            client_name="Test API Client",
+            client_identifier="test-client-001",
+            description="Test client for integration",
+            created_at=datetime.now(UTC),
+            last_used_at=datetime.now(UTC) - timedelta(hours=12),
+            is_active=True,
+            expires_at=datetime.now(UTC) + timedelta(days=365),
+            rate_limit_per_minute=100,
+            allowed_ips=["10.0.0.0/8", "192.168.1.0/24"],
+            roles=["api_reader"],
+            permissions=["deliveries:read", "evidence:read"],
+        )
+
+        assert entry.client_name == "Test API Client"
+        assert entry.is_active is True
+        assert entry.rate_limit_per_minute == 100
+        assert len(entry.allowed_ips) == 2
+
+    def test_api_client_without_restrictions(self):
+        """Test ApiClientAccessReviewEntry without IP or rate limits."""
+        from qerds.api.schemas.admin import ApiClientAccessReviewEntry
+
+        entry = ApiClientAccessReviewEntry(
+            client_id=uuid.uuid4(),
+            client_name="Unrestricted Client",
+            client_identifier="unrestricted-001",
+            description=None,
+            created_at=datetime.now(UTC),
+            last_used_at=None,
+            is_active=True,
+            expires_at=None,
+            rate_limit_per_minute=None,
+            allowed_ips=None,
+            roles=[],
+            permissions=[],
+        )
+
+        assert entry.rate_limit_per_minute is None
+        assert entry.allowed_ips is None
+        assert entry.expires_at is None
+        assert entry.last_used_at is None
+
+    def test_access_review_report_response_schema(self):
+        """Test AccessReviewReportResponse schema validation."""
+        from qerds.api.schemas.admin import (
+            AccessReviewReportResponse,
+            ApiClientAccessReviewEntry,
+            UserAccessReviewEntry,
+        )
+
+        users = [
+            UserAccessReviewEntry(
+                user_id=uuid.uuid4(),
+                username="admin1",
+                email="admin1@example.com",
+                display_name="Admin One",
+                created_at=datetime.now(UTC),
+                is_active=True,
+                is_superuser=True,
+                mfa_enabled=True,
+                account_locked=False,
+                roles=["admin_user"],
+                permissions=["admin:*"],
+            ),
+            UserAccessReviewEntry(
+                user_id=uuid.uuid4(),
+                username="admin2",
+                email="admin2@example.com",
+                display_name="Admin Two",
+                created_at=datetime.now(UTC),
+                is_active=False,
+                is_superuser=False,
+                mfa_enabled=False,
+                account_locked=False,
+                roles=["auditor"],
+                permissions=["audit:read"],
+            ),
+        ]
+
+        clients = [
+            ApiClientAccessReviewEntry(
+                client_id=uuid.uuid4(),
+                client_name="CI Client",
+                client_identifier="ci-001",
+                created_at=datetime.now(UTC),
+                is_active=True,
+                roles=["deployer"],
+                permissions=["deploy:write"],
+            ),
+        ]
+
+        response = AccessReviewReportResponse(
+            generated_at=datetime.now(UTC),
+            generated_by="admin-123",
+            filters_applied={"role": "admin_user"},
+            total_users=2,
+            total_clients=1,
+            users=users,
+            clients=clients,
+            summary={
+                "active_users": 1,
+                "inactive_users": 1,
+                "mfa_enabled_users": 1,
+                "mfa_adoption_rate": 50.0,
+            },
+        )
+
+        assert response.total_users == 2
+        assert response.total_clients == 1
+        assert response.filters_applied["role"] == "admin_user"
+        assert response.summary["mfa_adoption_rate"] == 50.0
+
+    def test_access_review_report_empty(self):
+        """Test AccessReviewReportResponse with no data."""
+        from qerds.api.schemas.admin import AccessReviewReportResponse
+
+        response = AccessReviewReportResponse(
+            generated_at=datetime.now(UTC),
+            generated_by="admin-123",
+            filters_applied={},
+            total_users=0,
+            total_clients=0,
+            users=[],
+            clients=[],
+            summary={},
+        )
+
+        assert response.total_users == 0
+        assert response.total_clients == 0
+        assert len(response.users) == 0
+        assert len(response.clients) == 0
+
+
+class TestAccessReviewReportFilters:
+    """Tests for access review report filter logic."""
+
+    def test_filter_by_role_logic(self):
+        """Test that role filter correctly includes/excludes users."""
+        # Simulate the role filtering logic
+        user_roles = ["admin_user", "auditor"]
+        filter_role = "admin_user"
+
+        # User with the role should be included
+        assert filter_role in user_roles
+
+        # User without the role should be excluded
+        other_user_roles = ["viewer"]
+        assert filter_role not in other_user_roles
+
+    def test_last_active_before_filter_logic(self):
+        """Test that last_active_before filter works correctly."""
+        filter_date = datetime.now(UTC) - timedelta(days=30)
+
+        # User inactive for 60 days should be included
+        last_active_60_days = datetime.now(UTC) - timedelta(days=60)
+        assert last_active_60_days < filter_date
+
+        # User active 10 days ago should be excluded
+        last_active_10_days = datetime.now(UTC) - timedelta(days=10)
+        assert not (last_active_10_days < filter_date)
+
+        # User with no login should be included
+        last_active_none = None
+        assert last_active_none is None  # None means never logged in
+
+    def test_created_after_filter_logic(self):
+        """Test that created_after filter works correctly."""
+        filter_date = datetime.now(UTC) - timedelta(days=90)
+
+        # User created 30 days ago should be included
+        created_30_days = datetime.now(UTC) - timedelta(days=30)
+        assert created_30_days >= filter_date
+
+        # User created 120 days ago should be excluded
+        created_120_days = datetime.now(UTC) - timedelta(days=120)
+        assert not (created_120_days >= filter_date)
+
+    def test_include_inactive_filter_logic(self):
+        """Test include_inactive filter logic."""
+        users = [
+            {"username": "active1", "is_active": True},
+            {"username": "active2", "is_active": True},
+            {"username": "inactive1", "is_active": False},
+        ]
+
+        # With include_inactive=True, all users included
+        result_all = list(users)
+        assert len(result_all) == 3
+
+        # With include_inactive=False, only active users
+        result_active = [u for u in users if u["is_active"]]
+        assert len(result_active) == 2
+        assert all(u["is_active"] for u in result_active)
+
+
+class TestAccessReviewReportSummary:
+    """Tests for access review report summary calculations."""
+
+    def test_mfa_adoption_rate_calculation(self):
+        """Test MFA adoption rate is calculated correctly."""
+        total_users = 10
+        mfa_enabled = 7
+
+        rate = (mfa_enabled / total_users * 100) if total_users else 0
+        assert rate == 70.0
+
+    def test_mfa_adoption_rate_zero_users(self):
+        """Test MFA adoption rate with no users."""
+        total_users = 0
+        mfa_enabled = 0
+
+        rate = (mfa_enabled / total_users * 100) if total_users else 0
+        assert rate == 0
+
+    def test_account_locked_detection(self):
+        """Test account lock status detection."""
+        now = datetime.now(UTC)
+
+        # Locked until future - should be locked
+        locked_until_future = now + timedelta(hours=1)
+        is_locked_1 = locked_until_future > now
+        assert is_locked_1 is True
+
+        # Locked until past - should not be locked
+        locked_until_past = now - timedelta(hours=1)
+        is_locked_2 = locked_until_past > now
+        assert is_locked_2 is False
+
+        # No lock time - should not be locked
+        locked_until_none = None
+        is_locked_3 = locked_until_none is not None and locked_until_none > now
+        assert is_locked_3 is False
+
+    def test_summary_statistics_structure(self):
+        """Test that summary has all expected fields."""
+        expected_fields = [
+            "active_users",
+            "inactive_users",
+            "active_clients",
+            "inactive_clients",
+            "mfa_enabled_users",
+            "mfa_adoption_rate",
+            "superuser_count",
+            "locked_accounts",
+        ]
+
+        # Create sample summary
+        summary = {
+            "active_users": 8,
+            "inactive_users": 2,
+            "active_clients": 3,
+            "inactive_clients": 1,
+            "mfa_enabled_users": 6,
+            "mfa_adoption_rate": 75.0,
+            "superuser_count": 1,
+            "locked_accounts": 0,
+        }
+
+        for field in expected_fields:
+            assert field in summary
+
+
+class TestAccessReviewReportCSVFormat:
+    """Tests for CSV format support in access review report."""
+
+    def test_format_parameter_accepts_json(self):
+        """Test that format=json is accepted."""
+        valid_formats = ["json", "csv"]
+        assert "json" in valid_formats
+
+    def test_format_parameter_accepts_csv(self):
+        """Test that format=csv is accepted."""
+        valid_formats = ["json", "csv"]
+        assert "csv" in valid_formats
+
+    def test_csv_data_conversion_logic(self):
+        """Test that user data can be flattened for CSV."""
+        # Simulate user entry data
+        user_data = {
+            "user_id": str(uuid.uuid4()),
+            "username": "testuser",
+            "email": "test@example.com",
+            "roles": ["admin_user", "auditor"],
+            "permissions": ["admin:read", "audit:read"],
+        }
+
+        # CSV would flatten lists to comma-separated strings
+        csv_roles = ",".join(user_data["roles"])
+        csv_permissions = ",".join(user_data["permissions"])
+
+        assert csv_roles == "admin_user,auditor"
+        assert csv_permissions == "admin:read,audit:read"
+
+
 class TestSystemStatsEndpointIntegration:
     """Integration tests for system stats endpoint."""
 

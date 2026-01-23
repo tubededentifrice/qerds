@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 if TYPE_CHECKING:
     from qerds.db.models.audit import VulnerabilityEvidence
+    from qerds.db.models.vulnerability import VulnerabilityFinding
     from qerds.services.conformity_package import ConformityPackageService
     from qerds.services.dr_evidence import DREvidenceRecord, DREvidenceService
     from qerds.services.vulnerability_evidence import VulnerabilityEvidenceService
@@ -31,6 +32,8 @@ from sqlalchemy.orm import selectinload
 from qerds.api.middleware.auth import AuthenticatedUser, require_role
 from qerds.api.schemas.admin import (
     AccessReviewExportResponse,
+    AccessReviewReportResponse,
+    ApiClientAccessReviewEntry,
     AuditPackRequest,
     AuditPackResponse,
     AuditPackVerification,
@@ -44,6 +47,8 @@ from qerds.api.schemas.admin import (
     DeliveryIncidentSummary,
     DeliveryStats,
     DeliveryTimelineResponse,
+    DeploymentMarkerRequest,
+    DeploymentMarkerResponse,
     DisclosureExportRequest,
     DisclosureExportResponse,
     DisputeTimelineResponse,
@@ -73,9 +78,17 @@ from qerds.api.schemas.admin import (
     TimelineEventWithVerification,
     TraceabilityEntryResponse,
     TraceabilityMatrixResponse,
+    UserAccessReviewEntry,
     UserStats,
     VulnerabilityEvidenceListResponse,
     VulnerabilityEvidenceResponse,
+    VulnerabilityFindingBulkImport,
+    VulnerabilityFindingBulkImportResponse,
+    VulnerabilityFindingCreate,
+    VulnerabilityFindingExport,
+    VulnerabilityFindingListResponse,
+    VulnerabilityFindingResponse,
+    VulnerabilityFindingUpdate,
     VulnScanUploadRequest,
 )
 from qerds.db.models.base import QualificationLabel
@@ -635,8 +648,26 @@ async def create_config_snapshot(
     )
 
     db.add(snapshot)
-    await db.commit()
+    await db.flush()
     await db.refresh(snapshot)
+
+    # Also log to OPS stream for change management compliance (REQ-H05)
+    from qerds.services.ops_events import OpsEventLogger, create_admin_actor
+
+    ops_logger = OpsEventLogger(db)
+    ops_actor = create_admin_actor(str(user.principal_id))
+    await ops_logger.log_config_snapshot(
+        actor=ops_actor,
+        snapshot_id=snapshot.policy_snapshot_id,
+        version=request_body.version,
+        description=request_body.description,
+        details={
+            "make_active": request_body.make_active,
+            "has_doc_refs": bool(request_body.doc_refs),
+        },
+    )
+
+    await db.commit()
 
     logger.info(
         "Config snapshot created",
@@ -656,6 +687,115 @@ async def create_config_snapshot(
         snapshot_hash=snapshot.snapshot_hash or snapshot_hash,
         is_active=snapshot.is_active,
         doc_refs=snapshot.doc_refs,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Deployment Markers (REQ-H05)
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/deployment-marker",
+    response_model=DeploymentMarkerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record deployment marker",
+    description="Record a deployment event for change management. Called by CI/CD.",
+)
+async def create_deployment_marker(
+    request_body: DeploymentMarkerRequest,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> DeploymentMarkerResponse:
+    """Record a deployment marker for change management audit trail.
+
+    This endpoint is called by CI/CD pipelines after successful deployment
+    to create an immutable audit record of the deployment event. This supports
+    REQ-H05 change management requirements.
+
+    The deployment marker includes:
+    - Application version
+    - Git commit SHA
+    - Deployer identity (CI system or user)
+    - Target environment
+    - Additional deployment metadata
+
+    Args:
+        request_body: Deployment marker details.
+        user: Authenticated admin user (or API client with admin role).
+        db: Database session.
+        request: HTTP request for audit logging.
+
+    Returns:
+        DeploymentMarkerResponse with the recorded marker details.
+    """
+    from qerds.services.ops_events import (
+        DeploymentInfo,
+        OpsActor,
+        OpsEventLogger,
+    )
+
+    # Create ops actor from the deployer info (might be CI system)
+    # Determine actor type based on whether it's a CI system or human
+    actor_type = "ci_pipeline" if "ci" in request_body.deployer.lower() else "admin"
+    ops_actor = OpsActor(
+        actor_id=request_body.deployer,
+        actor_type=actor_type,
+    )
+
+    # Build deployment info
+    deployment = DeploymentInfo(
+        version=request_body.version,
+        git_sha=request_body.git_sha,
+        deployer=request_body.deployer,
+        environment=request_body.environment,
+        details=request_body.details or {},
+    )
+
+    # Log to OPS audit stream
+    ops_logger = OpsEventLogger(db)
+    entry = await ops_logger.log_deployment_marker(
+        actor=ops_actor,
+        deployment=deployment,
+    )
+
+    # Also log to SECURITY stream for security audit purposes
+    security_logger = SecurityEventLogger(db)
+    security_actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=security_actor,
+        action=f"deployment marker: {request_body.version}",
+        target_type="deployment",
+        target_id=request_body.version,
+        details={
+            "git_sha": request_body.git_sha,
+            "deployer": request_body.deployer,
+            "environment": request_body.environment,
+        },
+    )
+
+    await db.commit()
+
+    logger.info(
+        "Deployment marker recorded",
+        extra={
+            "version": request_body.version,
+            "git_sha": request_body.git_sha,
+            "deployer": request_body.deployer,
+            "environment": request_body.environment,
+            "audit_record_id": str(entry.record_id),
+        },
+    )
+
+    return DeploymentMarkerResponse(
+        marker_id=uuid.uuid4(),  # Generate a unique marker ID
+        version=request_body.version,
+        git_sha=request_body.git_sha,
+        deployer=request_body.deployer,
+        environment=request_body.environment,
+        recorded_at=entry.created_at,
+        audit_record_id=entry.record_id,
     )
 
 
@@ -858,6 +998,221 @@ async def export_access_reviews(
         inactive_users=inactive_users,
         inactive_clients=inactive_clients,
         permission_changes=permission_changes,
+    )
+
+
+@router.get(
+    "/access-review-report",
+    response_model=AccessReviewReportResponse,
+    summary="Generate access review report",
+    description="Generate a user-centric access review report for compliance reviews.",
+)
+async def get_access_review_report(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    role: Annotated[str | None, Query(description="Filter by role name")] = None,
+    last_active_before: Annotated[
+        datetime | None, Query(description="Filter users inactive since this date")
+    ] = None,
+    created_after: Annotated[
+        datetime | None, Query(description="Filter users created after this date")
+    ] = None,
+    include_inactive: Annotated[bool, Query(description="Include disabled accounts")] = True,
+    output_format: Annotated[
+        str,
+        Query(alias="format", pattern=r"^(json|csv)$", description="Response format: json or csv"),
+    ] = "json",
+) -> AccessReviewReportResponse:
+    """Generate access review report for compliance reviews (REQ-H06, REQ-D02).
+
+    Provides a user-centric view of all admin users and API clients with their
+    roles, permissions, MFA status, and account status. Supports filtering and
+    CSV export for spreadsheet-based review processes.
+
+    Args:
+        user: Authenticated admin user requesting the report.
+        db: Database session.
+        request: HTTP request for audit logging.
+        role: Filter to users/clients with this role.
+        last_active_before: Filter to users inactive since this date.
+        created_after: Filter to users created after this date.
+        include_inactive: Whether to include disabled accounts.
+        output_format: Response format (json or csv).
+
+    Returns:
+        Access review report with user and client entries.
+
+    Note:
+        CSV format returns the same data structure but with the response
+        Content-Type set to text/csv when using the format=csv parameter.
+        The actual CSV conversion is handled by a response middleware.
+    """
+    from qerds.db.models.auth import AdminUser as AdminUserModel
+    from qerds.db.models.auth import ApiClient, RoleBinding
+
+    # Log sensitive data access
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_sensitive_access(
+        actor=actor,
+        resource_type="access_review_report",
+        resource_id="all",
+        access_type="generate",
+        purpose="access_review",
+    )
+
+    # Track applied filters for report metadata
+    filters_applied: dict[str, Any] = {"output_format": output_format}
+    if role:
+        filters_applied["role"] = role
+    if last_active_before:
+        filters_applied["last_active_before"] = last_active_before.isoformat()
+    if created_after:
+        filters_applied["created_after"] = created_after.isoformat()
+    if not include_inactive:
+        filters_applied["include_inactive"] = False
+
+    # Query admin users with role bindings
+    users_query = select(AdminUserModel).options(
+        selectinload(AdminUserModel.role_bindings).selectinload(RoleBinding.role)
+    )
+
+    # Apply filters
+    if not include_inactive:
+        users_query = users_query.where(AdminUserModel.is_active.is_(True))
+    if created_after:
+        users_query = users_query.where(AdminUserModel.created_at >= created_after)
+    if last_active_before:
+        # Users who haven't logged in since the specified date
+        users_query = users_query.where(
+            (AdminUserModel.last_login_at.is_(None))
+            | (AdminUserModel.last_login_at < last_active_before)
+        )
+
+    result = await db.execute(users_query)
+    admin_users = result.scalars().all()
+
+    # Query API clients with role bindings
+    clients_query = select(ApiClient).options(
+        selectinload(ApiClient.role_bindings).selectinload(RoleBinding.role)
+    )
+
+    if not include_inactive:
+        clients_query = clients_query.where(ApiClient.is_active.is_(True))
+    if created_after:
+        clients_query = clients_query.where(ApiClient.created_at >= created_after)
+    if last_active_before:
+        clients_query = clients_query.where(
+            (ApiClient.last_used_at.is_(None)) | (ApiClient.last_used_at < last_active_before)
+        )
+
+    result = await db.execute(clients_query)
+    api_clients = result.scalars().all()
+
+    # Build user entries with role filtering
+    user_entries: list[UserAccessReviewEntry] = []
+    for admin_user in admin_users:
+        # Collect roles and permissions from bindings
+        roles: list[str] = []
+        permissions: set[str] = set()
+        for binding in admin_user.role_bindings:
+            if binding.role:
+                roles.append(binding.role.name)
+                permissions.update(binding.role.permissions or [])
+
+        # Apply role filter if specified
+        if role and role not in roles:
+            continue
+
+        # Determine if account is locked
+        account_locked = False
+        if admin_user.locked_until:
+            account_locked = admin_user.locked_until > datetime.now(UTC)
+
+        user_entries.append(
+            UserAccessReviewEntry(
+                user_id=admin_user.admin_user_id,
+                username=admin_user.username,
+                email=admin_user.email,
+                display_name=admin_user.display_name,
+                created_at=admin_user.created_at,
+                last_login_at=admin_user.last_login_at,
+                last_activity_at=admin_user.last_login_at,  # Use login as activity proxy
+                is_active=admin_user.is_active,
+                is_superuser=admin_user.is_superuser,
+                mfa_enabled=admin_user.mfa_enabled,
+                account_locked=account_locked,
+                locked_until=admin_user.locked_until if account_locked else None,
+                failed_login_count=admin_user.failed_login_count,
+                password_changed_at=admin_user.password_changed_at,
+                external_provider=admin_user.external_provider,
+                roles=roles,
+                permissions=sorted(permissions),
+            )
+        )
+
+    # Build client entries with role filtering
+    client_entries: list[ApiClientAccessReviewEntry] = []
+    for client in api_clients:
+        # Collect roles and permissions from bindings
+        roles = []
+        permissions = set()
+        for binding in client.role_bindings:
+            if binding.role:
+                roles.append(binding.role.name)
+                permissions.update(binding.role.permissions or [])
+
+        # Apply role filter if specified
+        if role and role not in roles:
+            continue
+
+        client_entries.append(
+            ApiClientAccessReviewEntry(
+                client_id=client.api_client_id,
+                client_name=client.name,
+                client_identifier=client.client_id,
+                description=client.description,
+                created_at=client.created_at,
+                last_used_at=client.last_used_at,
+                is_active=client.is_active,
+                expires_at=client.expires_at,
+                rate_limit_per_minute=client.rate_limit_per_minute,
+                allowed_ips=client.allowed_ips,
+                roles=roles,
+                permissions=sorted(permissions),
+            )
+        )
+
+    # Calculate summary statistics
+    active_users = sum(1 for u in user_entries if u.is_active)
+    active_clients = sum(1 for c in client_entries if c.is_active)
+    mfa_enabled_count = sum(1 for u in user_entries if u.mfa_enabled)
+    superuser_count = sum(1 for u in user_entries if u.is_superuser)
+    locked_count = sum(1 for u in user_entries if u.account_locked)
+
+    summary = {
+        "active_users": active_users,
+        "inactive_users": len(user_entries) - active_users,
+        "active_clients": active_clients,
+        "inactive_clients": len(client_entries) - active_clients,
+        "mfa_enabled_users": mfa_enabled_count,
+        "mfa_adoption_rate": (mfa_enabled_count / len(user_entries) * 100) if user_entries else 0,
+        "superuser_count": superuser_count,
+        "locked_accounts": locked_count,
+    }
+
+    await db.commit()
+
+    return AccessReviewReportResponse(
+        generated_at=datetime.now(UTC),
+        generated_by=str(user.principal_id),
+        filters_applied=filters_applied,
+        total_users=len(user_entries),
+        total_clients=len(client_entries),
+        users=user_entries,
+        clients=client_entries,
+        summary=summary,
     )
 
 
@@ -2635,4 +2990,560 @@ async def update_remediation_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update remediation status: {e!s}",
+        ) from e
+
+
+# -----------------------------------------------------------------------------
+# Vulnerability Finding Endpoints (REQ-H09)
+# -----------------------------------------------------------------------------
+
+
+def _finding_to_response(finding: VulnerabilityFinding) -> VulnerabilityFindingResponse:
+    """Convert a VulnerabilityFinding model to response schema."""
+    return VulnerabilityFindingResponse(
+        finding_id=finding.finding_id,
+        created_at=finding.created_at,
+        source=finding.source.value,
+        external_finding_id=finding.external_finding_id,
+        severity=finding.severity.value,
+        status=finding.status.value,
+        title=finding.title,
+        description=finding.description,
+        affected_component=finding.affected_component,
+        discovered_at=finding.discovered_at,
+        remediated_at=finding.remediated_at,
+        remediation_notes=finding.remediation_notes,
+        exception_approved_by=finding.exception_approved_by,
+        exception_reason=finding.exception_reason,
+        exception_expires=finding.exception_expires,
+        source_evidence_id=finding.source_evidence_id,
+        cvss_score=finding.cvss_score,
+        cve_id=finding.cve_id,
+        extra_metadata=finding.extra_metadata,
+    )
+
+
+@router.post(
+    "/vulnerabilities",
+    response_model=VulnerabilityFindingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create vulnerability finding",
+    description="Create a new vulnerability finding for tracking (REQ-H09).",
+)
+async def create_vulnerability_finding(
+    request_body: VulnerabilityFindingCreate,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityFindingResponse:
+    """Create a new vulnerability finding."""
+    from qerds.db.models.vulnerability import (
+        FindingSeverity,
+        FindingSource,
+        FindingStatus,
+        VulnerabilityFinding,
+    )
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="create_vulnerability_finding",
+        target_type="vulnerability_finding",
+        target_id=request_body.title,
+        details={
+            "source": request_body.source,
+            "severity": request_body.severity,
+            "affected_component": request_body.affected_component,
+        },
+    )
+
+    source = FindingSource(request_body.source)
+    severity = FindingSeverity(request_body.severity)
+
+    try:
+        finding = VulnerabilityFinding(
+            source=source,
+            external_finding_id=request_body.external_finding_id,
+            severity=severity,
+            status=FindingStatus.OPEN,
+            title=request_body.title,
+            description=request_body.description,
+            affected_component=request_body.affected_component,
+            discovered_at=request_body.discovered_at or datetime.now(UTC),
+            cvss_score=request_body.cvss_score,
+            cve_id=request_body.cve_id,
+            source_evidence_id=request_body.source_evidence_id,
+            extra_metadata=request_body.extra_metadata,
+        )
+
+        db.add(finding)
+        await db.commit()
+        await db.refresh(finding)
+
+        return _finding_to_response(finding)
+
+    except Exception as e:
+        logger.exception("Failed to create vulnerability finding: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create vulnerability finding: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/vulnerabilities/import",
+    response_model=VulnerabilityFindingBulkImportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk import vulnerability findings",
+    description="Import findings from scanner JSON (Trivy format) (REQ-H09).",
+)
+async def import_vulnerability_findings(
+    request_body: VulnerabilityFindingBulkImport,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityFindingBulkImportResponse:
+    """Bulk import vulnerability findings from scanner output."""
+    from qerds.db.models.vulnerability import (
+        FindingSeverity,
+        FindingSource,
+        FindingStatus,
+        VulnerabilityFinding,
+    )
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="import_vulnerability_findings",
+        target_type="vulnerability_finding",
+        target_id=request_body.affected_component,
+        details={
+            "source": request_body.source,
+            "finding_count": len(request_body.findings),
+        },
+    )
+
+    source = FindingSource(request_body.source)
+    imported: list[VulnerabilityFinding] = []
+    errors: list[str] = []
+    skipped = 0
+
+    severity_map = {
+        "CRITICAL": FindingSeverity.CRITICAL,
+        "HIGH": FindingSeverity.HIGH,
+        "MEDIUM": FindingSeverity.MEDIUM,
+        "LOW": FindingSeverity.LOW,
+        "UNKNOWN": FindingSeverity.INFORMATIONAL,
+    }
+
+    try:
+        for idx, finding_data in enumerate(request_body.findings):
+            try:
+                vuln_id = finding_data.get("VulnerabilityID") or finding_data.get(
+                    "vulnerability_id"
+                )
+                if not vuln_id:
+                    errors.append(f"Finding {idx}: missing VulnerabilityID")
+                    continue
+
+                existing = await db.execute(
+                    select(VulnerabilityFinding).where(
+                        VulnerabilityFinding.source == source,
+                        VulnerabilityFinding.external_finding_id == vuln_id,
+                        VulnerabilityFinding.affected_component == request_body.affected_component,
+                    )
+                )
+                if existing.scalar_one_or_none():
+                    skipped += 1
+                    continue
+
+                raw_sev = finding_data.get("Severity") or finding_data.get("severity", "UNKNOWN")
+                severity = severity_map.get(raw_sev.upper(), FindingSeverity.INFORMATIONAL)
+
+                title = finding_data.get("Title") or finding_data.get("title") or vuln_id
+                description = finding_data.get("Description") or finding_data.get("description")
+
+                cvss_score = None
+                if "CVSS" in finding_data:
+                    cvss_data = finding_data["CVSS"]
+                    for vendor_data in cvss_data.values():
+                        if "V3Score" in vendor_data:
+                            cvss_score = vendor_data["V3Score"]
+                            break
+                elif "cvss_score" in finding_data:
+                    cvss_score = finding_data["cvss_score"]
+
+                finding = VulnerabilityFinding(
+                    source=source,
+                    external_finding_id=vuln_id,
+                    severity=severity,
+                    status=FindingStatus.OPEN,
+                    title=title[:500],
+                    description=description,
+                    affected_component=request_body.affected_component,
+                    discovered_at=datetime.now(UTC),
+                    cvss_score=cvss_score,
+                    cve_id=vuln_id if vuln_id.startswith("CVE-") else None,
+                    source_evidence_id=request_body.source_evidence_id,
+                    extra_metadata=finding_data,
+                )
+
+                db.add(finding)
+                imported.append(finding)
+
+            except Exception as e:
+                errors.append(f"Finding {idx}: {e!s}")
+
+        await db.commit()
+
+        for finding in imported:
+            await db.refresh(finding)
+
+        return VulnerabilityFindingBulkImportResponse(
+            imported_count=len(imported),
+            skipped_count=skipped,
+            error_count=len(errors),
+            findings=[_finding_to_response(f) for f in imported],
+            errors=errors,
+        )
+
+    except Exception as e:
+        logger.exception("Failed to import vulnerability findings: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import vulnerability findings: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/vulnerabilities",
+    response_model=VulnerabilityFindingListResponse,
+    summary="List vulnerability findings",
+    description="List vulnerability findings with optional filtering (REQ-H09).",
+)
+async def list_vulnerability_findings(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    source: Annotated[
+        str | None,
+        Query(
+            description="Filter by source",
+            pattern=r"^(trivy|grype|pentest|manual|dependency_check|sast|dast)$",
+        ),
+    ] = None,
+    severity: Annotated[
+        str | None,
+        Query(
+            description="Filter by severity",
+            pattern=r"^(critical|high|medium|low|informational)$",
+        ),
+    ] = None,
+    finding_status: Annotated[
+        str | None,
+        Query(
+            alias="status",
+            description="Filter by status",
+            pattern=r"^(open|in_progress|remediated|excepted|false_positive)$",
+        ),
+    ] = None,
+    affected_component: Annotated[str | None, Query(description="Filter by component")] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="Maximum results")] = 100,
+    offset: Annotated[int, Query(ge=0, description="Results to skip")] = 0,
+) -> VulnerabilityFindingListResponse:
+    """List vulnerability findings."""
+    from qerds.db.models.vulnerability import (
+        FindingSeverity,
+        FindingSource,
+        FindingStatus,
+        VulnerabilityFinding,
+    )
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="list_vulnerability_findings",
+        target_type="vulnerability_finding",
+        target_id="all",
+        details={"source": source, "severity": severity, "status": finding_status},
+    )
+
+    try:
+        query = select(VulnerabilityFinding)
+
+        if source:
+            query = query.where(VulnerabilityFinding.source == FindingSource(source))
+        if severity:
+            query = query.where(VulnerabilityFinding.severity == FindingSeverity(severity))
+        if finding_status:
+            query = query.where(VulnerabilityFinding.status == FindingStatus(finding_status))
+        if affected_component:
+            query = query.where(VulnerabilityFinding.affected_component == affected_component)
+
+        query = (
+            query.order_by(
+                VulnerabilityFinding.severity,
+                VulnerabilityFinding.discovered_at.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+
+        result = await db.execute(query)
+        findings = result.scalars().all()
+
+        count_query = select(func.count()).select_from(VulnerabilityFinding)
+        if source:
+            count_query = count_query.where(VulnerabilityFinding.source == FindingSource(source))
+        if severity:
+            count_query = count_query.where(
+                VulnerabilityFinding.severity == FindingSeverity(severity)
+            )
+        if finding_status:
+            count_query = count_query.where(
+                VulnerabilityFinding.status == FindingStatus(finding_status)
+            )
+        if affected_component:
+            count_query = count_query.where(
+                VulnerabilityFinding.affected_component == affected_component
+            )
+
+        count_result = await db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        return VulnerabilityFindingListResponse(
+            total=total,
+            findings=[_finding_to_response(f) for f in findings],
+        )
+
+    except Exception as e:
+        logger.exception("Failed to list vulnerability findings: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list vulnerability findings: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/vulnerabilities/export",
+    response_model=VulnerabilityFindingExport,
+    summary="Export vulnerability findings",
+    description="Export audit-ready vulnerability finding report (REQ-H09).",
+)
+async def export_vulnerability_findings(
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+    source: Annotated[
+        str | None,
+        Query(
+            description="Filter by source",
+            pattern=r"^(trivy|grype|pentest|manual|dependency_check|sast|dast)$",
+        ),
+    ] = None,
+    finding_status: Annotated[
+        str | None,
+        Query(
+            alias="status",
+            description="Filter by status",
+            pattern=r"^(open|in_progress|remediated|excepted|false_positive)$",
+        ),
+    ] = None,
+) -> VulnerabilityFindingExport:
+    """Export vulnerability findings for audit pack."""
+    from qerds.db.models.vulnerability import (
+        FindingSource,
+        FindingStatus,
+        VulnerabilityFinding,
+    )
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="export_vulnerability_findings",
+        target_type="vulnerability_finding",
+        target_id="export",
+        details={"source": source, "status": finding_status},
+    )
+
+    try:
+        query = select(VulnerabilityFinding)
+
+        if source:
+            query = query.where(VulnerabilityFinding.source == FindingSource(source))
+        if finding_status:
+            query = query.where(VulnerabilityFinding.status == FindingStatus(finding_status))
+
+        query = query.order_by(
+            VulnerabilityFinding.severity,
+            VulnerabilityFinding.discovered_at.desc(),
+        )
+
+        result = await db.execute(query)
+        findings = list(result.scalars().all())
+
+        by_severity: dict[str, int] = {}
+        by_status: dict[str, int] = {}
+        by_source: dict[str, int] = {}
+
+        for finding in findings:
+            sev = finding.severity.value
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            stat = finding.status.value
+            by_status[stat] = by_status.get(stat, 0) + 1
+            src = finding.source.value
+            by_source[src] = by_source.get(src, 0) + 1
+
+        export_data = {
+            "exported_at": datetime.now(UTC).isoformat(),
+            "exported_by": str(user.principal_id),
+            "total_findings": len(findings),
+            "by_severity": by_severity,
+            "by_status": by_status,
+            "by_source": by_source,
+            "finding_ids": [str(f.finding_id) for f in findings],
+        }
+        export_hash = hashlib.sha256(json.dumps(export_data, sort_keys=True).encode()).hexdigest()
+
+        return VulnerabilityFindingExport(
+            exported_at=datetime.now(UTC),
+            exported_by=str(user.principal_id),
+            total_findings=len(findings),
+            by_severity=by_severity,
+            by_status=by_status,
+            by_source=by_source,
+            findings=[_finding_to_response(f) for f in findings],
+            export_hash=export_hash,
+        )
+
+    except Exception as e:
+        logger.exception("Failed to export vulnerability findings: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export vulnerability findings: {e!s}",
+        ) from e
+
+
+@router.get(
+    "/vulnerabilities/{finding_id}",
+    response_model=VulnerabilityFindingResponse,
+    summary="Get vulnerability finding",
+    description="Get details of a specific vulnerability finding.",
+)
+async def get_vulnerability_finding(
+    finding_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityFindingResponse:
+    """Get a specific vulnerability finding."""
+    from qerds.db.models.vulnerability import VulnerabilityFinding
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="view_vulnerability_finding",
+        target_type="vulnerability_finding",
+        target_id=str(finding_id),
+    )
+
+    try:
+        result = await db.execute(
+            select(VulnerabilityFinding).where(VulnerabilityFinding.finding_id == finding_id)
+        )
+        finding = result.scalar_one_or_none()
+
+        if finding is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vulnerability finding {finding_id} not found",
+            )
+
+        return _finding_to_response(finding)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get vulnerability finding: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get vulnerability finding: {e!s}",
+        ) from e
+
+
+@router.patch(
+    "/vulnerabilities/{finding_id}",
+    response_model=VulnerabilityFindingResponse,
+    summary="Update vulnerability finding",
+    description="Update status/remediation of a vulnerability finding (REQ-H09).",
+)
+async def update_vulnerability_finding(
+    finding_id: uuid.UUID,
+    request_body: VulnerabilityFindingUpdate,
+    user: AdminUser,
+    db: DbSession,
+    request: Request,
+) -> VulnerabilityFindingResponse:
+    """Update a vulnerability finding status or remediation info."""
+    from qerds.db.models.vulnerability import FindingStatus, VulnerabilityFinding
+
+    security_logger = SecurityEventLogger(db)
+    actor = _get_security_actor(user, request)
+    await security_logger.log_admin_action(
+        actor=actor,
+        action="update_vulnerability_finding",
+        target_type="vulnerability_finding",
+        target_id=str(finding_id),
+        details={"new_status": request_body.status},
+    )
+
+    try:
+        result = await db.execute(
+            select(VulnerabilityFinding).where(VulnerabilityFinding.finding_id == finding_id)
+        )
+        finding = result.scalar_one_or_none()
+
+        if finding is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Vulnerability finding {finding_id} not found",
+            )
+
+        if request_body.status:
+            new_status = FindingStatus(request_body.status)
+            finding.status = new_status
+
+            if new_status == FindingStatus.REMEDIATED and finding.remediated_at is None:
+                finding.remediated_at = datetime.now(UTC)
+
+            if new_status == FindingStatus.EXCEPTED:
+                if not request_body.exception_reason:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="exception_reason required when status is 'excepted'",
+                    )
+                finding.exception_approved_by = user.principal_id
+                finding.exception_reason = request_body.exception_reason
+                finding.exception_expires = request_body.exception_expires
+
+        if request_body.remediation_notes is not None:
+            finding.remediation_notes = request_body.remediation_notes
+
+        await db.commit()
+        await db.refresh(finding)
+
+        return _finding_to_response(finding)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update vulnerability finding: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update vulnerability finding: {e!s}",
         ) from e

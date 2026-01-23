@@ -62,6 +62,7 @@ class AuditEventType(Enum):
     # Operations stream events
     CONFIG_CHANGED = "config_changed"
     CONFIG_SNAPSHOT = "config_snapshot"
+    DEPLOYMENT_MARKER = "deployment_marker"
     DEPLOYMENT_STARTED = "deployment_started"
     DEPLOYMENT_COMPLETED = "deployment_completed"
     DEPLOYMENT_ROLLED_BACK = "deployment_rolled_back"

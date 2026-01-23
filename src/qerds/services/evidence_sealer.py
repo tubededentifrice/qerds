@@ -37,6 +37,10 @@ logger = logging.getLogger(__name__)
 # Canonicalization version for tracking format changes over time
 CANONICALIZATION_VERSION = "1.0"
 
+# ETSI EN 319 522-4-1 format version identifier for forward compatibility
+# Format: "ETSI-EN-319-522-4-1:<publication-date>"
+ETSI_FORMAT_VERSION = "ETSI-EN-319-522-4-1:2024-01"
+
 
 @dataclass(frozen=True, slots=True)
 class VerificationBundle:
@@ -87,9 +91,11 @@ class SealedEvidence:
     - Time attestation (RFC 3161 timestamp)
     - Verification bundle (certs, policies, algorithms)
     - Qualification label (per REQ-G02)
+    - ETSI format version (per EN 319 522-4-1)
 
     Attributes:
         evidence_id: Unique identifier for this sealed evidence.
+        format_version: ETSI EN 319 522-4-1 format version for forward compatibility.
         payload: The original event data being sealed.
         canonical_bytes: Deterministic byte representation of payload.
         canonicalization_version: Version of canonicalization method used.
@@ -102,6 +108,7 @@ class SealedEvidence:
     """
 
     evidence_id: str
+    format_version: str
     payload: dict[str, Any]
     canonical_bytes: bytes
     canonicalization_version: str
@@ -120,6 +127,7 @@ class SealedEvidence:
         """
         return {
             "evidence_id": self.evidence_id,
+            "format_version": self.format_version,
             "payload": self.payload,
             "canonicalization_version": self.canonicalization_version,
             "content_hash": self.content_hash,
@@ -368,6 +376,7 @@ class EvidenceSealer:
 
         return SealedEvidence(
             evidence_id=evidence_id,
+            format_version=ETSI_FORMAT_VERSION,
             payload=event_data,
             canonical_bytes=canonical_bytes,
             canonicalization_version=CANONICALIZATION_VERSION,

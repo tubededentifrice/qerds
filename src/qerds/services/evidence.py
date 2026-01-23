@@ -78,14 +78,23 @@ class EventData:
 
 @dataclass(frozen=True, slots=True)
 class ActorIdentification:
-    """Actor identification for evidence events (REQ-B03).
+    """Actor identification for evidence events (REQ-B03, REQ-C04).
 
     Captures the identity of the actor performing an action, with references
     to verifiable identity proofing where available.
 
+    Per EN 319 522-4-2, party identification requires an explicit identification
+    scheme URI (actor_id_type) for cross-provider interoperability.
+
     Attributes:
         actor_type: Type of actor (sender, recipient, system, admin, api_client).
         actor_ref: Primary reference to the actor (party_id, user_id, etc.).
+        actor_id_type: Identification scheme URI per EN 319 522-4-2 (optional).
+
+    Examples:
+            - urn:oasis:names:tc:ebcore:partyid-type:iso6523:0088 (GLN)
+            - urn:oasis:names:tc:ebcore:partyid-type:unregistered (internal)
+            - urn:oasis:names:tc:ebcore:partyid-type:iso6523:0002 (SIRENE)
         identity_proofing_ref: Reference to identity proofing record (optional).
         session_ref: Reference to authentication session (optional).
         ip_address_hash: Hashed IP address for privacy-preserving audit (optional).
@@ -93,6 +102,7 @@ class ActorIdentification:
 
     actor_type: ActorType
     actor_ref: str
+    actor_id_type: str | None = None
     identity_proofing_ref: str | None = None
     session_ref: str | None = None
     ip_address_hash: str | None = None
@@ -103,6 +113,8 @@ class ActorIdentification:
             "actor_type": self.actor_type.value,
             "actor_ref": self.actor_ref,
         }
+        if self.actor_id_type:
+            result["actor_id_type"] = self.actor_id_type
         if self.identity_proofing_ref:
             result["identity_proofing_ref"] = self.identity_proofing_ref
         if self.session_ref:
