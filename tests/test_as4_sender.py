@@ -45,7 +45,7 @@ def domibus_config() -> DomibusConfig:
     return DomibusConfig(
         base_url="http://localhost:8080",
         username="admin",
-        password="test_password",  # noqa: S106 - test credential
+        password="test_password",  # Test credential
         timeout=10,
         sender_party_id="QERDS_TEST",
         service="urn:eu:europa:ec:qerds:registered-delivery",
@@ -952,7 +952,7 @@ class TestFactoryFunction:
         mock_session: AsyncMock,
     ):
         """Test creating service with parameter overrides."""
-        test_password = "custom_pass"  # noqa: S105 - test credential
+        test_password = "custom_pass"
         service = create_as4_sender_service(
             mock_session,
             base_url="http://custom-domibus:9090",
@@ -1007,7 +1007,7 @@ class TestDataClasses:
         config = DomibusConfig(
             base_url="http://localhost:8080",
             username="admin",
-            password="secret",  # noqa: S106 - test credential
+            password="secret",
         )
 
         assert config.timeout == 30

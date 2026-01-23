@@ -699,7 +699,7 @@ class TestThirdPartyVerificationValidToken:
 
         # When database is available, this returns verification result
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": token},
         )
 
@@ -725,7 +725,7 @@ class TestThirdPartyVerificationInvalidToken:
         evidence_object_id: UUID,
     ):
         """Verification endpoint rejects requests without token."""
-        response = await api_client.get(f"/verify/proofs/{evidence_object_id}")
+        response = await api_client.get(f"/api/verify/proofs/{evidence_object_id}")
 
         assert response.status_code == 422  # Missing required parameter
 
@@ -740,7 +740,7 @@ class TestThirdPartyVerificationInvalidToken:
         invalid_token = "a" * 96
 
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": invalid_token},
         )
 
@@ -759,7 +759,7 @@ class TestThirdPartyVerificationInvalidToken:
         token = generate_verification_token("proof", str(other_proof_id))
 
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": token},
         )
 
@@ -776,7 +776,7 @@ class TestThirdPartyVerificationInvalidToken:
         token = generate_verification_token("delivery", str(evidence_object_id))
 
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": token},
         )
 
@@ -790,7 +790,7 @@ class TestThirdPartyVerificationInvalidToken:
     ):
         """Verification endpoint rejects tokens shorter than minimum length."""
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": "short"},
         )
 
@@ -804,7 +804,7 @@ class TestThirdPartyVerificationInvalidToken:
     ):
         """Verification endpoint rejects tokens exceeding maximum length."""
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": "x" * 300},
         )
 
@@ -1065,7 +1065,7 @@ class TestProofAccessAuthorization:
         delivery_id: UUID,
     ):
         """User without sender role cannot access sender proof endpoints."""
-        response = await api_client.get(f"/sender/deliveries/{delivery_id}/proofs")
+        response = await api_client.get(f"/api/sender/deliveries/{delivery_id}/proofs")
 
         # Should require authentication
         assert response.status_code in [401, 403]
@@ -1077,7 +1077,8 @@ class TestProofAccessAuthorization:
         delivery_id: UUID,
     ):
         """User without authentication cannot access recipient proof endpoints."""
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}/proofs/acceptance")
+        url = f"/api/recipient/deliveries/{delivery_id}/proofs/acceptance"
+        response = await api_client.get(url)
 
         # Should require authentication
         assert response.status_code == 401
@@ -1090,12 +1091,12 @@ class TestProofAccessAuthorization:
     ):
         """Third-party verification requires valid token, not user auth."""
         # Without token
-        response = await api_client.get(f"/verify/proofs/{evidence_object_id}")
+        response = await api_client.get(f"/api/verify/proofs/{evidence_object_id}")
         assert response.status_code == 422  # Missing required token param
 
         # With invalid token
         response = await api_client.get(
-            f"/verify/proofs/{evidence_object_id}",
+            f"/api/verify/proofs/{evidence_object_id}",
             params={"token": "a" * 50 + "." + "b" * 50},
         )
         assert response.status_code == 401  # Invalid token
@@ -1161,7 +1162,7 @@ class TestVerificationHealthCheck:
     @pytest.mark.asyncio
     async def test_verify_health_endpoint(self, api_client: AsyncClient):
         """Verify health endpoint returns healthy status."""
-        response = await api_client.get("/verify/health")
+        response = await api_client.get("/api/verify/health")
 
         assert response.status_code == 200
         data = response.json()

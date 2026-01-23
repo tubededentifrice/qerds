@@ -38,11 +38,11 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 def database_url() -> str:
     """Get test database URL from environment or use default.
 
-    Default assumes test compose stack is running on localhost:5433.
+    Default assumes docker compose stack is running on localhost:5434.
     """
     return os.environ.get(
         "TEST_DATABASE_URL",
-        "postgresql+psycopg://qerds:qerds_dev_password@localhost:5433/qerds_test",
+        "postgresql+psycopg://qerds:qerds_dev_password@localhost:5434/qerds_test",
     )
 
 
@@ -51,7 +51,7 @@ def sync_database_url() -> str:
     """Get synchronous test database URL for Alembic/schema operations."""
     return os.environ.get(
         "TEST_DATABASE_URL_SYNC",
-        "postgresql://qerds:qerds_dev_password@localhost:5433/qerds_test",
+        "postgresql://qerds:qerds_dev_password@localhost:5434/qerds_test",
     )
 
 

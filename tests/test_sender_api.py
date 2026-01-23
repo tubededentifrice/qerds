@@ -392,6 +392,7 @@ class TestSenderAPIIntegration:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Note: When router is included directly without prefix, use /sender/health
             response = await client.get("/sender/health")
             assert response.status_code == 200
             data = response.json()
@@ -406,7 +407,7 @@ class TestAuthenticationRequirements:
     async def test_create_delivery_requires_auth(self, api_client: AsyncClient):
         """Test that create delivery requires authentication."""
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             json={
                 "recipient": {"email": "test@example.com"},
             },
@@ -417,14 +418,14 @@ class TestAuthenticationRequirements:
     @pytest.mark.asyncio
     async def test_list_deliveries_requires_auth(self, api_client: AsyncClient):
         """Test that list deliveries requires authentication."""
-        response = await api_client.get("/sender/deliveries")
+        response = await api_client.get("/api/sender/deliveries")
         assert response.status_code in [401, 403]
 
     @pytest.mark.asyncio
     async def test_get_delivery_requires_auth(self, api_client: AsyncClient):
         """Test that get delivery requires authentication."""
         delivery_id = str(uuid4())
-        response = await api_client.get(f"/sender/deliveries/{delivery_id}")
+        response = await api_client.get(f"/api/sender/deliveries/{delivery_id}")
         assert response.status_code in [401, 403]
 
     @pytest.mark.asyncio
@@ -432,7 +433,7 @@ class TestAuthenticationRequirements:
         """Test that content upload requires authentication."""
         delivery_id = str(uuid4())
         response = await api_client.post(
-            f"/sender/deliveries/{delivery_id}/content",
+            f"/api/sender/deliveries/{delivery_id}/content",
             files={"file": ("test.pdf", b"content", "application/pdf")},
             data={
                 "original_filename": "test.pdf",
@@ -446,14 +447,14 @@ class TestAuthenticationRequirements:
     async def test_deposit_requires_auth(self, api_client: AsyncClient):
         """Test that deposit requires authentication."""
         delivery_id = str(uuid4())
-        response = await api_client.post(f"/sender/deliveries/{delivery_id}/deposit")
+        response = await api_client.post(f"/api/sender/deliveries/{delivery_id}/deposit")
         assert response.status_code in [401, 403]
 
     @pytest.mark.asyncio
     async def test_list_proofs_requires_auth(self, api_client: AsyncClient):
         """Test that list proofs requires authentication."""
         delivery_id = str(uuid4())
-        response = await api_client.get(f"/sender/deliveries/{delivery_id}/proofs")
+        response = await api_client.get(f"/api/sender/deliveries/{delivery_id}/proofs")
         assert response.status_code in [401, 403]
 
 
@@ -464,7 +465,7 @@ class TestInputValidation:
     async def test_create_delivery_invalid_json(self, api_client: AsyncClient):
         """Test create delivery with invalid JSON."""
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             content="not valid json",
             headers={"Content-Type": "application/json"},
         )
@@ -474,14 +475,14 @@ class TestInputValidation:
     @pytest.mark.asyncio
     async def test_get_delivery_invalid_uuid(self, api_client: AsyncClient):
         """Test get delivery with invalid UUID format."""
-        response = await api_client.get("/sender/deliveries/not-a-uuid")
+        response = await api_client.get("/api/sender/deliveries/not-a-uuid")
         # May return 401 (auth check first) or 422 (validation error)
         assert response.status_code in [401, 403, 422]
 
     @pytest.mark.asyncio
     async def test_list_deliveries_invalid_offset(self, api_client: AsyncClient):
         """Test list deliveries with invalid offset."""
-        response = await api_client.get("/sender/deliveries?offset=-1")
+        response = await api_client.get("/api/sender/deliveries?offset=-1")
         # Should return 422 for validation error
         assert response.status_code in [401, 403, 422]  # Auth check may come first
 

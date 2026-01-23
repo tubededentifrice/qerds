@@ -909,6 +909,7 @@ def require_permission_decorator(
 
     def decorator(func: Callable) -> Callable:
         import asyncio
+        import inspect
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -963,7 +964,7 @@ def require_permission_decorator(
             return func(*args, **kwargs)
 
         # Return appropriate wrapper based on whether func is async
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             return async_wrapper
         return sync_wrapper
 

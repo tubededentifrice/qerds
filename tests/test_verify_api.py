@@ -36,7 +36,7 @@ class TestVerifyHealth:
     @pytest.mark.asyncio
     async def test_verify_health(self, api_client: AsyncClient):
         """Test the verify namespace health endpoint."""
-        response = await api_client.get("/verify/health")
+        response = await api_client.get("/api/verify/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -89,7 +89,7 @@ class TestProofVerificationEndpoint:
     async def test_proof_verification_requires_token(self, api_client: AsyncClient):
         """Test that proof verification endpoint requires a token."""
         proof_id = str(uuid.uuid4())
-        response = await api_client.get(f"/verify/proofs/{proof_id}")
+        response = await api_client.get(f"/api/verify/proofs/{proof_id}")
 
         # Should fail with 422 (missing required query param) or 401
         assert response.status_code in [422, 401]
@@ -99,10 +99,10 @@ class TestProofVerificationEndpoint:
         """Test that invalid tokens are rejected due to format."""
         proof_id = str(uuid.uuid4())
         # Token meets length requirements but wrong format (no dot separator)
-        invalid_token = "invalid-token-not-properly-formatted"  # noqa: S105
+        invalid_token = "invalid-token-not-properly-formatted"
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": invalid_token},
         )
 
@@ -117,7 +117,7 @@ class TestProofVerificationEndpoint:
         malformed_token = "a" * 96  # 96 hex chars, no separator
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": malformed_token},
         )
 
@@ -138,7 +138,7 @@ class TestProofVerificationEndpoint:
         token = generate_verification_token("proof", other_proof_id)
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": token},
         )
 
@@ -155,7 +155,7 @@ class TestProofVerificationEndpoint:
         token = generate_verification_token("delivery", proof_id)
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": token},
         )
 
@@ -176,7 +176,7 @@ class TestProofVerificationEndpoint:
         token = generate_verification_token("proof", proof_id)
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": token},
         )
 
@@ -190,7 +190,7 @@ class TestProofVerificationEndpoint:
     async def test_proof_verification_invalid_uuid(self, api_client: AsyncClient):
         """Test that invalid UUID returns appropriate error."""
         response = await api_client.get(
-            "/verify/proofs/not-a-uuid",
+            "/api/verify/proofs/not-a-uuid",
             params={"token": "a" * 32 + "." + "b" * 64},
         )
 
@@ -203,7 +203,7 @@ class TestProofVerificationEndpoint:
         proof_id = str(uuid.uuid4())
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": "short"},  # Less than 32 chars
         )
 
@@ -215,7 +215,7 @@ class TestProofVerificationEndpoint:
         proof_id = str(uuid.uuid4())
 
         response = await api_client.get(
-            f"/verify/proofs/{proof_id}",
+            f"/api/verify/proofs/{proof_id}",
             params={"token": "x" * 300},  # More than 256 chars
         )
 
@@ -229,7 +229,7 @@ class TestDeliveryStatusEndpoint:
     async def test_delivery_status_requires_token(self, api_client: AsyncClient):
         """Test that delivery status endpoint requires a token."""
         delivery_id = str(uuid.uuid4())
-        response = await api_client.get(f"/verify/deliveries/{delivery_id}/status")
+        response = await api_client.get(f"/api/verify/deliveries/{delivery_id}/status")
 
         # Should fail with 422 (missing required query param)
         assert response.status_code == 422
@@ -242,7 +242,7 @@ class TestDeliveryStatusEndpoint:
         invalid_token = "a" * 32 + "." + "invalid_signature"
 
         response = await api_client.get(
-            f"/verify/deliveries/{delivery_id}/status",
+            f"/api/verify/deliveries/{delivery_id}/status",
             params={"token": invalid_token},
         )
 
@@ -260,7 +260,7 @@ class TestDeliveryStatusEndpoint:
         token = generate_verification_token("delivery", other_delivery_id)
 
         response = await api_client.get(
-            f"/verify/deliveries/{delivery_id}/status",
+            f"/api/verify/deliveries/{delivery_id}/status",
             params={"token": token},
         )
 
@@ -275,7 +275,7 @@ class TestDeliveryStatusEndpoint:
         token = generate_verification_token("proof", delivery_id)
 
         response = await api_client.get(
-            f"/verify/deliveries/{delivery_id}/status",
+            f"/api/verify/deliveries/{delivery_id}/status",
             params={"token": token},
         )
 
@@ -296,7 +296,7 @@ class TestDeliveryStatusEndpoint:
         token = generate_verification_token("delivery", delivery_id)
 
         response = await api_client.get(
-            f"/verify/deliveries/{delivery_id}/status",
+            f"/api/verify/deliveries/{delivery_id}/status",
             params={"token": token},
         )
 
@@ -313,7 +313,7 @@ class TestDeliveryStatusEndpoint:
     async def test_delivery_status_invalid_uuid(self, api_client: AsyncClient):
         """Test that invalid UUID returns appropriate error."""
         response = await api_client.get(
-            "/verify/deliveries/not-a-uuid/status",
+            "/api/verify/deliveries/not-a-uuid/status",
             params={"token": "a" * 32 + "." + "b" * 64},
         )
 

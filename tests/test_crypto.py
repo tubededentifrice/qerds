@@ -915,7 +915,7 @@ class TestDataclassSerialization:
     def test_timestamp_token_to_dict(self):
         """Test TimestampToken serialization."""
         token = TimestampToken(
-            token_id="tst-123",  # noqa: S106
+            token_id="tst-123",
             timestamp=datetime(2024, 1, 1, tzinfo=UTC),
             message_imprint="hash123",
             hash_algorithm="sha384",
@@ -929,7 +929,7 @@ class TestDataclassSerialization:
 
         data = token.to_dict()
 
-        assert data["token_id"] == "tst-123"  # noqa: S105
+        assert data["token_id"] == "tst-123"
         assert data["hash_algorithm"] == "sha384"
         assert data["serial_number"] == 1
 

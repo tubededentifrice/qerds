@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -259,7 +259,7 @@ class PDFGenerator:
         return {
             "qualification_mode": self._qualification_mode,
             "is_qualified": self._qualification_mode == "qualified",
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "generator_version": "1.0.0",
             "_": self._translator,
             "lang": self._lang,
@@ -378,7 +378,7 @@ class PDFGenerator:
                 content=pdf_bytes,
                 page_count=len(pdf_document.pages),
                 template_name="<inline>",
-                generated_at=datetime.utcnow().isoformat() + "Z",
+                generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
 
         except Exception as e:

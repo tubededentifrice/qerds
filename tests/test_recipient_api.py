@@ -36,7 +36,7 @@ class TestRecipientHealth:
     @pytest.mark.asyncio
     async def test_recipient_health(self, api_client: AsyncClient):
         """Test the recipient namespace health endpoint."""
-        response = await api_client.get("/recipient/health")
+        response = await api_client.get("/api/recipient/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -49,25 +49,25 @@ class TestInboxEndpoint:
     @pytest.mark.asyncio
     async def test_inbox_requires_authentication(self, api_client: AsyncClient):
         """Test that inbox endpoint requires authentication."""
-        response = await api_client.get("/recipient/inbox")
+        response = await api_client.get("/api/recipient/inbox")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_inbox_pagination_params(self, api_client: AsyncClient):
         """Test that inbox supports pagination parameters."""
         # Without auth, we get 401, but the schema should accept these params
-        response = await api_client.get("/recipient/inbox?page=2&page_size=50")
+        response = await api_client.get("/api/recipient/inbox?page=2&page_size=50")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_inbox_pagination_validation(self, api_client: AsyncClient):
         """Test pagination parameter validation."""
         # Page must be >= 1
-        response = await api_client.get("/recipient/inbox?page=0")
+        response = await api_client.get("/api/recipient/inbox?page=0")
         assert response.status_code in [401, 422]  # Auth check or validation
 
         # Page size must be <= 100
-        response = await api_client.get("/recipient/inbox?page_size=200")
+        response = await api_client.get("/api/recipient/inbox?page_size=200")
         assert response.status_code in [401, 422]
 
 
@@ -78,13 +78,13 @@ class TestDeliveryDetailEndpoint:
     async def test_delivery_detail_requires_authentication(self, api_client: AsyncClient):
         """Test that delivery detail endpoint requires authentication."""
         delivery_id = str(uuid.uuid4())
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}")
+        response = await api_client.get(f"/api/recipient/deliveries/{delivery_id}")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_delivery_detail_invalid_uuid(self, api_client: AsyncClient):
         """Test that invalid UUID returns appropriate error."""
-        response = await api_client.get("/recipient/deliveries/not-a-uuid")
+        response = await api_client.get("/api/recipient/deliveries/not-a-uuid")
         assert response.status_code in [401, 422]  # Auth or validation error
 
 
@@ -96,7 +96,7 @@ class TestAcceptDeliveryEndpoint:
         """Test that accept endpoint requires authentication."""
         delivery_id = str(uuid.uuid4())
         response = await api_client.post(
-            f"/recipient/deliveries/{delivery_id}/accept",
+            f"/api/recipient/deliveries/{delivery_id}/accept",
             json={"confirm_electronic_consent": True},
         )
         assert response.status_code == 401
@@ -107,7 +107,7 @@ class TestAcceptDeliveryEndpoint:
         delivery_id = str(uuid.uuid4())
         # Empty body should use default (confirm_electronic_consent=True)
         response = await api_client.post(
-            f"/recipient/deliveries/{delivery_id}/accept",
+            f"/api/recipient/deliveries/{delivery_id}/accept",
             json={},
         )
         assert response.status_code == 401  # Auth required, but schema should accept
@@ -121,7 +121,7 @@ class TestRefuseDeliveryEndpoint:
         """Test that refuse endpoint requires authentication."""
         delivery_id = str(uuid.uuid4())
         response = await api_client.post(
-            f"/recipient/deliveries/{delivery_id}/refuse",
+            f"/api/recipient/deliveries/{delivery_id}/refuse",
             json={},
         )
         assert response.status_code == 401
@@ -131,7 +131,7 @@ class TestRefuseDeliveryEndpoint:
         """Test refuse with optional reason."""
         delivery_id = str(uuid.uuid4())
         response = await api_client.post(
-            f"/recipient/deliveries/{delivery_id}/refuse",
+            f"/api/recipient/deliveries/{delivery_id}/refuse",
             json={"reason": "I did not request this delivery"},
         )
         assert response.status_code == 401  # Auth required
@@ -143,7 +143,7 @@ class TestRefuseDeliveryEndpoint:
         # Reason over 1000 chars should be rejected
         long_reason = "x" * 1001
         response = await api_client.post(
-            f"/recipient/deliveries/{delivery_id}/refuse",
+            f"/api/recipient/deliveries/{delivery_id}/refuse",
             json={"reason": long_reason},
         )
         # Should get validation error (422) even without auth
@@ -158,7 +158,7 @@ class TestContentDownloadEndpoint:
     async def test_content_requires_authentication(self, api_client: AsyncClient):
         """Test that content download requires authentication."""
         delivery_id = str(uuid.uuid4())
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}/content")
+        response = await api_client.get(f"/api/recipient/deliveries/{delivery_id}/content")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -167,7 +167,7 @@ class TestContentDownloadEndpoint:
         delivery_id = str(uuid.uuid4())
         content_object_id = str(uuid.uuid4())
         response = await api_client.get(
-            f"/recipient/deliveries/{delivery_id}/content",
+            f"/api/recipient/deliveries/{delivery_id}/content",
             params={"content_object_id": content_object_id},
         )
         assert response.status_code == 401
@@ -180,7 +180,8 @@ class TestProofDownloadEndpoint:
     async def test_proof_requires_authentication(self, api_client: AsyncClient):
         """Test that proof download requires authentication."""
         delivery_id = str(uuid.uuid4())
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}/proofs/acceptance")
+        url = f"/api/recipient/deliveries/{delivery_id}/proofs/acceptance"
+        response = await api_client.get(url)
         assert response.status_code == 401
 
     @pytest.mark.asyncio
@@ -191,7 +192,7 @@ class TestProofDownloadEndpoint:
 
         for proof_type in valid_types:
             response = await api_client.get(
-                f"/recipient/deliveries/{delivery_id}/proofs/{proof_type}"
+                f"/api/recipient/deliveries/{delivery_id}/proofs/{proof_type}"
             )
             # Should fail with 401 (auth) not 422 (validation)
             assert response.status_code == 401, f"Failed for proof type: {proof_type}"
@@ -200,7 +201,8 @@ class TestProofDownloadEndpoint:
     async def test_invalid_proof_type(self, api_client: AsyncClient):
         """Test that invalid proof type returns validation error or auth error."""
         delivery_id = str(uuid.uuid4())
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}/proofs/invalid_type")
+        url = f"/api/recipient/deliveries/{delivery_id}/proofs/invalid_type"
+        response = await api_client.get(url)
         # FastAPI may check auth before path validation depending on middleware order
         # Either 422 (validation) or 401 (auth) is acceptable
         assert response.status_code in [401, 422]
@@ -388,13 +390,13 @@ class TestOpenAPIDocumentation:
 
         # Check all recipient endpoints are documented
         expected_paths = [
-            "/recipient/health",
-            "/recipient/inbox",
-            "/recipient/deliveries/{delivery_id}",
-            "/recipient/deliveries/{delivery_id}/accept",
-            "/recipient/deliveries/{delivery_id}/refuse",
-            "/recipient/deliveries/{delivery_id}/content",
-            "/recipient/deliveries/{delivery_id}/proofs/{proof_type}",
+            "/api/recipient/health",
+            "/api/recipient/inbox",
+            "/api/recipient/deliveries/{delivery_id}",
+            "/api/recipient/deliveries/{delivery_id}/accept",
+            "/api/recipient/deliveries/{delivery_id}/refuse",
+            "/api/recipient/deliveries/{delivery_id}/content",
+            "/api/recipient/deliveries/{delivery_id}/proofs/{proof_type}",
         ]
 
         for path in expected_paths:
@@ -408,7 +410,7 @@ class TestOpenAPIDocumentation:
         paths = data.get("paths", {})
 
         # Check that inbox endpoint has recipient tag
-        inbox_path = paths.get("/recipient/inbox", {})
+        inbox_path = paths.get("/api/recipient/inbox", {})
         get_op = inbox_path.get("get", {})
         assert "recipient" in get_op.get("tags", [])
 
@@ -420,7 +422,7 @@ class TestOpenAPIDocumentation:
         paths = data.get("paths", {})
 
         # Check inbox endpoint security
-        inbox_path = paths.get("/recipient/inbox", {})
+        inbox_path = paths.get("/api/recipient/inbox", {})
         get_op = inbox_path.get("get", {})
         # Should have 401 response documented
         responses = get_op.get("responses", {})
@@ -434,7 +436,7 @@ class TestOpenAPIDocumentation:
 
         # Find the proof_type parameter or schema
         paths = data.get("paths", {})
-        proof_path = paths.get("/recipient/deliveries/{delivery_id}/proofs/{proof_type}", {})
+        proof_path = paths.get("/api/recipient/deliveries/{delivery_id}/proofs/{proof_type}", {})
         get_op = proof_path.get("get", {})
         parameters = get_op.get("parameters", [])
 

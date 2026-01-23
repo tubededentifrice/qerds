@@ -57,7 +57,7 @@ def mock_s3_client():
         s3_client = boto3.client(
             "s3",
             aws_access_key_id="test_access_key",
-            aws_secret_access_key="test_secret_key",  # noqa: S106
+            aws_secret_access_key="test_secret_key",
             region_name="us-east-1",
             config=config,
         )
@@ -66,7 +66,7 @@ def mock_s3_client():
         client = ObjectStoreClient(
             endpoint_url="http://mocked",  # Not actually used
             access_key="test_access_key",
-            secret_key="test_secret_key",  # noqa: S106
+            secret_key="test_secret_key",
             region="us-east-1",
         )
         # Replace the internal client with moto-mocked one
@@ -218,7 +218,7 @@ class TestObjectStoreClientInit:
             client = ObjectStoreClient(
                 endpoint_url="http://localhost:9000",
                 access_key="access",
-                secret_key="secret",  # noqa: S106
+                secret_key="secret",
                 region="eu-west-1",
             )
             assert client._endpoint_url == "http://localhost:9000"

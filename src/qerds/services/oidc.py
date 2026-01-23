@@ -23,7 +23,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from authlib.integrations.httpx_client import AsyncOAuth2Client
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from qerds.db.models.base import IALLevel, ProofingMethod
 
@@ -225,10 +225,7 @@ class OIDCAuthorizationResult(BaseModel):
     user_info: dict[str, Any] = Field(default_factory=dict)
     provider_id: str = ""
 
-    class Config:
-        """Pydantic config."""
-
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 # ACR to IAL mapping for FranceConnect+

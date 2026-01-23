@@ -198,15 +198,22 @@ def _include_routers(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance.
     """
-    # HTML page routes (must be first to avoid conflicts with API routes)
+    # HTML page routes (no prefix - serve at root for user-facing pages)
     app.include_router(pages_router)
 
-    # API namespace routers
+    # Browser-facing routers (HTML/redirect-based, no /api prefix)
+    # - auth_router: OAuth/OIDC flows with browser redirects
+    # - pickup_router: Authentication-gated pickup portal with HTML templates
     app.include_router(auth_router)
     app.include_router(pickup_router)
-    app.include_router(sender_router)
-    app.include_router(recipient_router)
-    app.include_router(consent_router)
-    app.include_router(verify_router)
-    app.include_router(admin_router)
-    app.include_router(as4_router)  # Domibus AS4 webhook callbacks (REQ-C04)
+
+    # JSON API namespace routers (prefixed with /api to avoid conflicts with HTML pages)
+    # This follows the standard pattern:
+    #   - /api/sender/... for JSON API endpoints
+    #   - /sender/... for HTML page routes
+    app.include_router(sender_router, prefix="/api")
+    app.include_router(recipient_router, prefix="/api")
+    app.include_router(consent_router, prefix="/api")
+    app.include_router(verify_router, prefix="/api")
+    app.include_router(admin_router, prefix="/api")
+    app.include_router(as4_router, prefix="/api")  # Domibus AS4 webhook callbacks (REQ-C04)

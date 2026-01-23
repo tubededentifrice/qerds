@@ -530,14 +530,14 @@ class TestTokenSecurity:
 
     def test_token_hash_consistent(self, session_service):
         """Test that token hashing is consistent."""
-        token = "test-token-12345"  # noqa: S105 - test data
+        token = "test-token-12345"
         hash1 = session_service._hash_token(token)
         hash2 = session_service._hash_token(token)
         assert hash1 == hash2
 
     def test_token_hash_length(self, session_service):
         """Test that token hash is SHA-256 (64 hex chars)."""
-        token = "test-token"  # noqa: S105 - test data
+        token = "test-token"
         hash_value = session_service._hash_token(token)
         assert len(hash_value) == 64
 
@@ -733,8 +733,8 @@ class TestSessionToken:
         session_id = uuid4()
         now = datetime.now(UTC)
 
-        test_access_token = "access-token-abc"  # noqa: S105 - test data
-        test_refresh_token = "refresh-token-xyz"  # noqa: S105 - test data
+        test_access_token = "access-token-abc"
+        test_refresh_token = "refresh-token-xyz"
         token = SessionToken(
             session_id=session_id,
             access_token=test_access_token,
@@ -752,7 +752,7 @@ class TestSessionToken:
         session_id = uuid4()
         now = datetime.now(UTC)
 
-        test_access_token = "access-token-abc"  # noqa: S105 - test data
+        test_access_token = "access-token-abc"
         token = SessionToken(
             session_id=session_id,
             access_token=test_access_token,

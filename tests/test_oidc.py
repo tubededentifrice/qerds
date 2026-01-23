@@ -516,9 +516,9 @@ class TestFranceConnectServiceTokenExchange:
             )
 
         assert isinstance(result, OIDCAuthorizationResult)
-        assert result.access_token == "test_access_token"  # noqa: S105
+        assert result.access_token == "test_access_token"
         assert result.id_token == mock_id_token
-        assert result.refresh_token == "test_refresh_token"  # noqa: S105
+        assert result.refresh_token == "test_refresh_token"
 
 
 class TestFranceConnectServiceVerifyIdentity:
@@ -532,7 +532,7 @@ class TestFranceConnectServiceVerifyIdentity:
         service = FranceConnectService(oidc_config)
 
         auth_result = OIDCAuthorizationResult(
-            access_token="test_token",  # noqa: S106
+            access_token="test_token",
             id_token="",
             provider_id="franceconnect_plus_test",
         )
@@ -561,7 +561,7 @@ class TestFranceConnectServiceVerifyIdentity:
 
         for acr, expected_ial in test_cases:
             auth_result = OIDCAuthorizationResult(
-                access_token="test_token",  # noqa: S106
+                access_token="test_token",
                 id_token="",
                 provider_id="franceconnect_plus_test",
             )
@@ -587,7 +587,7 @@ class TestFranceConnectServiceLogout:
 
         with patch.object(service, "_get_provider_metadata", return_value=mock_provider_metadata):
             logout_url = await service.create_logout_url(
-                id_token_hint="test_id_token",  # noqa: S106
+                id_token_hint="test_id_token",
                 post_logout_redirect_uri="http://localhost/",
             )
 

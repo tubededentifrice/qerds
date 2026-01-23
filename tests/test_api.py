@@ -80,7 +80,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_sender_health(self, api_client: AsyncClient):
         """Test the sender namespace health endpoint."""
-        response = await api_client.get("/sender/health")
+        response = await api_client.get("/api/sender/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -89,7 +89,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_recipient_health(self, api_client: AsyncClient):
         """Test the recipient namespace health endpoint."""
-        response = await api_client.get("/recipient/health")
+        response = await api_client.get("/api/recipient/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -98,7 +98,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_verify_health(self, api_client: AsyncClient):
         """Test the verify namespace health endpoint."""
-        response = await api_client.get("/verify/health")
+        response = await api_client.get("/api/verify/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -107,7 +107,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_admin_health(self, api_client: AsyncClient):
         """Test the admin namespace health endpoint."""
-        response = await api_client.get("/admin/health")
+        response = await api_client.get("/api/admin/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -249,10 +249,10 @@ class TestOpenAPIDocumentation:
         paths = data.get("paths", {})
 
         # Check that all namespace health endpoints are documented
-        assert "/sender/health" in paths
-        assert "/recipient/health" in paths
-        assert "/verify/health" in paths
-        assert "/admin/health" in paths
+        assert "/api/sender/health" in paths
+        assert "/api/recipient/health" in paths
+        assert "/api/verify/health" in paths
+        assert "/api/admin/health" in paths
 
     @pytest.mark.asyncio
     async def test_openapi_includes_namespace_tags_in_paths(self, api_client: AsyncClient):
@@ -263,16 +263,16 @@ class TestOpenAPIDocumentation:
 
         # Verify that namespace endpoints have correct tags
         # Each namespace router specifies its tag in the APIRouter definition
-        sender_health = paths.get("/sender/health", {}).get("get", {})
+        sender_health = paths.get("/api/sender/health", {}).get("get", {})
         assert "sender" in sender_health.get("tags", [])
 
-        recipient_health = paths.get("/recipient/health", {}).get("get", {})
+        recipient_health = paths.get("/api/recipient/health", {}).get("get", {})
         assert "recipient" in recipient_health.get("tags", [])
 
-        verify_health = paths.get("/verify/health", {}).get("get", {})
+        verify_health = paths.get("/api/verify/health", {}).get("get", {})
         assert "verify" in verify_health.get("tags", [])
 
-        admin_health = paths.get("/admin/health", {}).get("get", {})
+        admin_health = paths.get("/api/admin/health", {}).get("get", {})
         assert "admin" in admin_health.get("tags", [])
 
     @pytest.mark.asyncio

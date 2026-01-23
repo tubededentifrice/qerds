@@ -151,7 +151,7 @@ class TestAuthenticationBypass:
     @pytest.mark.asyncio
     async def test_missing_auth_token_returns_401(self, api_client: AsyncClient) -> None:
         """Requests without auth token should be rejected with 401."""
-        response = await api_client.get("/sender/deliveries")
+        response = await api_client.get("/api/sender/deliveries")
         assert response.status_code in [401, 403]
 
     @pytest.mark.asyncio
@@ -159,7 +159,7 @@ class TestAuthenticationBypass:
         """Malformed Bearer token should be rejected."""
         # Malformed token (not base64, random garbage)
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": "Bearer not-a-valid-token-format"},
         )
         assert response.status_code in [401, 403]
@@ -168,7 +168,7 @@ class TestAuthenticationBypass:
     async def test_empty_bearer_token(self, api_client: AsyncClient) -> None:
         """Empty Bearer token should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": "Bearer "},
         )
         assert response.status_code in [401, 403]
@@ -177,7 +177,7 @@ class TestAuthenticationBypass:
     async def test_bearer_without_token(self, api_client: AsyncClient) -> None:
         """Authorization header with only 'Bearer' should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": "Bearer"},
         )
         assert response.status_code in [401, 403]
@@ -186,7 +186,7 @@ class TestAuthenticationBypass:
     async def test_wrong_auth_scheme(self, api_client: AsyncClient) -> None:
         """Non-Bearer auth scheme should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="},
         )
         assert response.status_code in [401, 403]
@@ -202,7 +202,7 @@ class TestAuthenticationBypass:
         fake_jwt = f"{header.decode()}.{payload.decode()}."
 
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": f"Bearer {fake_jwt}"},
         )
         assert response.status_code in [401, 403]
@@ -213,7 +213,7 @@ class TestAuthenticationBypass:
         # Random token that would be expired in database
         expired_token = secrets.token_urlsafe(32)
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"Authorization": f"Bearer {expired_token}"},
         )
         assert response.status_code in [401, 403]
@@ -222,7 +222,7 @@ class TestAuthenticationBypass:
     async def test_x_session_token_header_with_invalid_token(self, api_client: AsyncClient) -> None:
         """Invalid X-Session-Token header should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"X-Session-Token": "invalid-session-token"},
         )
         assert response.status_code in [401, 403]
@@ -231,7 +231,7 @@ class TestAuthenticationBypass:
     async def test_api_key_header_with_invalid_key(self, api_client: AsyncClient) -> None:
         """Invalid X-API-Key header should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"X-API-Key": "invalid-api-key"},
         )
         assert response.status_code in [401, 403]
@@ -239,11 +239,14 @@ class TestAuthenticationBypass:
     @pytest.mark.asyncio
     async def test_cookie_with_invalid_session(self, api_client: AsyncClient) -> None:
         """Invalid session cookie should be rejected."""
-        response = await api_client.get(
-            "/sender/deliveries",
-            cookies={"qerds_session": "invalid-session-cookie-value"},
-        )
-        assert response.status_code in [401, 403]
+        # Set cookie on client to avoid httpx per-request cookies deprecation warning
+        api_client.cookies.set("qerds_session", "invalid-session-cookie-value")
+        try:
+            response = await api_client.get("/api/sender/deliveries")
+            assert response.status_code in [401, 403]
+        finally:
+            # Clean up the cookie
+            api_client.cookies.delete("qerds_session")
 
 
 class TestSessionSecurity:
@@ -304,7 +307,7 @@ class TestAuthorizationBoundaries:
     @pytest.mark.asyncio
     async def test_sender_cannot_access_admin_endpoints(self, api_client: AsyncClient) -> None:
         """Sender users should not access admin endpoints."""
-        response = await api_client.get("/admin/stats")
+        response = await api_client.get("/api/admin/stats")
         # Should require admin auth, return 401/403
         assert response.status_code in [401, 403]
 
@@ -401,7 +404,7 @@ class TestIDOR:
     async def test_api_delivery_list_requires_auth(self, api_client: AsyncClient) -> None:
         """API endpoint for listing deliveries requires authentication."""
         # The /sender/deliveries endpoint (list, not detail) returns JSON and requires auth
-        response = await api_client.get("/sender/deliveries")
+        response = await api_client.get("/api/sender/deliveries")
         # API endpoint returns 401 for unauthenticated requests
         assert response.status_code in [401, 403]
         # Verify it's a JSON response, not HTML
@@ -412,7 +415,7 @@ class TestIDOR:
         """API endpoint for content upload requires authentication."""
         delivery_id = str(uuid4())
         response = await api_client.post(
-            f"/sender/deliveries/{delivery_id}/content",
+            f"/api/sender/deliveries/{delivery_id}/content",
             files={"file": ("test.pdf", b"content", "application/pdf")},
         )
         assert response.status_code in [401, 403]
@@ -421,13 +424,14 @@ class TestIDOR:
     async def test_api_deposit_requires_auth(self, api_client: AsyncClient) -> None:
         """API endpoint for depositing delivery requires authentication."""
         delivery_id = str(uuid4())
-        response = await api_client.post(f"/sender/deliveries/{delivery_id}/deposit")
+        response = await api_client.post(f"/api/sender/deliveries/{delivery_id}/deposit")
         assert response.status_code in [401, 403]
 
     @pytest.mark.asyncio
     async def test_html_pages_return_only_mock_data(self, api_client: AsyncClient) -> None:
         """HTML pages return mock data, not real user data (safe for IDOR)."""
         # HTML pages serve demo/mock data that doesn't expose real user information
+        # Note: HTML pages are at /sender/... (no /api/ prefix)
         delivery_id = str(uuid4())
         response = await api_client.get(f"/sender/deliveries/{delivery_id}")
 
@@ -452,7 +456,7 @@ class TestIDOR:
         for invalid_id in invalid_ids:
             # Test content upload endpoint (POST to API, not GET to HTML page)
             response = await api_client.post(
-                f"/sender/deliveries/{invalid_id}/content",
+                f"/api/sender/deliveries/{invalid_id}/content",
                 files={"file": ("test.pdf", b"content", "application/pdf")},
             )
             # Should return validation error (422), auth error (401/403), or not found (404)
@@ -463,7 +467,7 @@ class TestIDOR:
     async def test_recipient_content_access_requires_auth(self, api_client: AsyncClient) -> None:
         """Recipients must authenticate to access delivery content."""
         delivery_id = str(uuid4())
-        response = await api_client.get(f"/recipient/deliveries/{delivery_id}/content")
+        response = await api_client.get(f"/api/recipient/deliveries/{delivery_id}/content")
         # Should require auth
         assert response.status_code in [401, 403, 404]
 
@@ -471,12 +475,12 @@ class TestIDOR:
     async def test_admin_endpoints_require_admin_auth(self, api_client: AsyncClient) -> None:
         """Admin endpoints require admin authentication."""
         # Admin stats endpoint
-        response = await api_client.get("/admin/stats")
+        response = await api_client.get("/api/admin/stats")
         assert response.status_code in [401, 403]
 
         # Admin audit pack endpoint
         response = await api_client.post(
-            "/admin/audit-packs",
+            "/api/admin/audit-packs",
             json={"start_date": "2024-01-01", "end_date": "2024-01-31"},
         )
         assert response.status_code in [401, 403]
@@ -485,7 +489,7 @@ class TestIDOR:
     async def test_delivery_timeline_admin_only(self, api_client: AsyncClient) -> None:
         """Delivery timeline endpoint is admin-only."""
         delivery_id = str(uuid4())
-        response = await api_client.get(f"/admin/deliveries/{delivery_id}/timeline")
+        response = await api_client.get(f"/api/admin/deliveries/{delivery_id}/timeline")
         assert response.status_code in [401, 403]
 
 
@@ -515,7 +519,7 @@ class TestSQLInjection:
         for payload in malicious_inputs:
             # Test in state filter
             response = await api_client.get(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 params={"state": payload},
             )
             # Should return auth error (401/403) or validation error (400/422)
@@ -532,7 +536,7 @@ class TestSQLInjection:
         ]
 
         for payload in malicious_paths:
-            response = await api_client.get(f"/sender/deliveries/{payload}")
+            response = await api_client.get(f"/api/sender/deliveries/{payload}")
             # Should return validation error or auth error, not 500
             assert response.status_code < 500
 
@@ -547,7 +551,7 @@ class TestSQLInjection:
 
         for payload in malicious_payloads:
             payload["recipient"] = payload.get("recipient", {"email": "test@example.com"})
-            response = await api_client.post("/sender/deliveries", json=payload)
+            response = await api_client.post("/api/sender/deliveries", json=payload)
             # Should return auth error (401/403) or validation error (400/422)
             assert response.status_code < 500
 
@@ -573,7 +577,7 @@ class TestXSSPrevention:
 
         for payload in xss_payloads:
             response = await api_client.post(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 json={
                     "recipient": {"email": "test@example.com"},
                     "subject": payload,
@@ -587,7 +591,7 @@ class TestXSSPrevention:
     async def test_xss_in_message_field(self, api_client: AsyncClient) -> None:
         """XSS payloads in message should be escaped or rejected."""
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             json={
                 "recipient": {"email": "test@example.com"},
                 "message": "<script>document.cookie</script>",
@@ -599,7 +603,7 @@ class TestXSSPrevention:
     async def test_xss_in_recipient_name(self, api_client: AsyncClient) -> None:
         """XSS payloads in recipient name should be escaped."""
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             json={
                 "recipient": {
                     "email": "test@example.com",
@@ -631,7 +635,7 @@ class TestCommandInjection:
 
         for filename in malicious_filenames:
             response = await api_client.post(
-                f"/sender/deliveries/{delivery_id}/content",
+                f"/api/sender/deliveries/{delivery_id}/content",
                 files={"file": (filename, b"content", "application/pdf")},
                 data={
                     "original_filename": filename,
@@ -658,7 +662,7 @@ class TestSecurityMisconfiguration:
     async def test_error_messages_do_not_leak_stack_traces(self, api_client: AsyncClient) -> None:
         """Error messages should not leak stack traces or internal details."""
         # Trigger various errors and check responses don't leak internals
-        response = await api_client.get("/sender/deliveries/invalid-uuid")
+        response = await api_client.get("/api/sender/deliveries/invalid-uuid")
 
         if response.status_code >= 400:
             body = response.text
@@ -679,7 +683,7 @@ class TestSecurityMisconfiguration:
             "/_debug",
             "/debug/routes",
             "/debug/sql",
-            "/admin/debug",
+            "/api/admin/debug",
             "/__debug__",
             "/profiler",
         ]
@@ -757,7 +761,7 @@ class TestInputValidation:
         large_payload = {"message": "x" * (10 * 1024 * 1024)}
 
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             json=large_payload,
         )
         # Should be rejected - either by size limit (413) or validation (422)
@@ -777,7 +781,7 @@ class TestInputValidation:
         deep_json = create_nested(100)
 
         response = await api_client.post(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             json=deep_json,
         )
         # Should handle gracefully (validation error or auth error)
@@ -794,7 +798,7 @@ class TestInputValidation:
 
         for payload in null_payloads:
             response = await api_client.post(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 json={
                     "recipient": {"email": "test@example.com"},
                     "subject": payload,
@@ -815,7 +819,7 @@ class TestInputValidation:
 
         for payload in unicode_payloads:
             response = await api_client.post(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 json={
                     "recipient": {"email": "test@example.com"},
                     "subject": payload,
@@ -840,7 +844,7 @@ class TestInputValidation:
 
         for email in invalid_emails:
             response = await api_client.post(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 json={"recipient": {"email": email}},
             )
             # Should return validation error or auth error, not 500
@@ -861,7 +865,7 @@ class TestInputValidation:
 
         for invalid_hash in invalid_hashes:
             response = await api_client.post(
-                f"/sender/deliveries/{delivery_id}/content",
+                f"/api/sender/deliveries/{delivery_id}/content",
                 files={"file": ("test.pdf", b"content", "application/pdf")},
                 data={
                     "original_filename": "test.pdf",
@@ -961,7 +965,7 @@ class TestRateLimitingAndDoS:
 
         for ct in malformed_content_types:
             response = await api_client.post(
-                "/sender/deliveries",
+                "/api/sender/deliveries",
                 content=b'{"recipient":{"email":"test@example.com"}}',
                 headers={"Content-Type": ct},
             )
@@ -1110,7 +1114,7 @@ class TestAPIClientSecurity:
     async def test_invalid_api_key_rejected(self, api_client: AsyncClient) -> None:
         """Invalid API keys should be rejected."""
         response = await api_client.get(
-            "/sender/deliveries",
+            "/api/sender/deliveries",
             headers={"X-API-Key": "invalid-key-that-does-not-exist"},
         )
         assert response.status_code in [401, 403]
