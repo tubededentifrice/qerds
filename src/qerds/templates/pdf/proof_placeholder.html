@@ -1,32 +1,64 @@
 {% extends "base.html" %}
+{#
+  Generic proof placeholder template for PDFs.
 
-{% block title %}Preuve de depot - {{ delivery_id }}{% endblock %}
+  This template is used when a specific proof template is not yet available,
+  providing a basic structure with common fields.
 
-{% block page_header %}Preuve de depot - {{ delivery_id }}{% endblock %}
+  Required context variables:
+  - delivery_id: Delivery reference (ID)
+
+  Optional context variables:
+  - deposit_timestamp: Timestamp of deposit
+  - status: Current status text
+  - status_class: CSS class for status badge (info, success, warning, error)
+  - sender_name: Sender name
+  - sender_email: Sender email
+  - sender_organization: Sender organization
+  - recipient_name: Recipient name
+  - recipient_email: Recipient email
+  - recipient_organization: Recipient organization
+  - content_info: Content metadata (subject, document_count, total_size)
+  - content_hash: SHA-256 hash of content
+  - seal_id: Provider seal ID
+  - seal_timestamp: Seal timestamp
+  - signature_algorithm: Signature algorithm
+
+  Provided by base context:
+  - is_qualified: Whether this is a qualified service
+  - qualification_mode: "qualified" or "non_qualified"
+  - generated_at: Document generation timestamp
+  - _: Translation function
+  - lang: Current language code
+#}
+
+{% block title %}{{ _('pdf.deposit_proof_title') }} - {{ delivery_id }}{% endblock %}
+
+{% block page_header %}{{ _('pdf.deposit_proof_title') }} - {{ delivery_id }}{% endblock %}
 
 {% block content %}
-<h1 class="document-title">Preuve de depot</h1>
+<h1 class="document-title">{{ _('pdf.deposit_proof_title') }}</h1>
 <p class="document-subtitle">
-    Lettre recommandee electronique {% if is_qualified %}qualifiee{% else %}(mode developpement){% endif %}
+    {% if is_qualified %}{{ _('pdf.lre_subtitle_qualified') }}{% else %}{{ _('pdf.lre_subtitle_dev') }}{% endif %}
 </p>
 
 <!-- Delivery Information -->
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Informations de l'envoi</h2>
+    <h2 class="info-section-title">{{ _('pdf.delivery_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-label">{{ _('pdf.delivery_id') }}</span>
             <span class="info-value text-mono">{{ delivery_id }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date de depot</span>
-            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.deposit_date') }}</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else _('pdf.not_available') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Statut</span>
+            <span class="info-label">{{ _('pdf.status') }}</span>
             <span class="info-value">
                 <span class="status-badge status-badge--{{ status_class|default('info') }}">
-                    {{ status|default('En attente') }}
+                    {{ status|default(_('pdf.pending')) }}
                 </span>
             </span>
         </div>
@@ -35,21 +67,21 @@
 
 <!-- Sender Information -->
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Expediteur</h2>
+    <h2 class="info-section-title">{{ _('pdf.sender_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Nom</span>
-            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.name') }}</span>
+            <span class="info-value">{{ sender_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if sender_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ sender_organization }}</span>
         </div>
         {% endif %}
         {% if sender_email %}
         <div class="info-row">
-            <span class="info-label">Email</span>
+            <span class="info-label">{{ _('pdf.email') }}</span>
             <span class="info-value">{{ sender_email }}</span>
         </div>
         {% endif %}
@@ -58,21 +90,21 @@
 
 <!-- Recipient Information -->
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Destinataire</h2>
+    <h2 class="info-section-title">{{ _('pdf.recipient_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Nom</span>
-            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.name') }}</span>
+            <span class="info-value">{{ recipient_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if recipient_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ recipient_organization }}</span>
         </div>
         {% endif %}
         {% if recipient_email %}
         <div class="info-row">
-            <span class="info-label">Email</span>
+            <span class="info-label">{{ _('pdf.email') }}</span>
             <span class="info-value">{{ recipient_email }}</span>
         </div>
         {% endif %}
@@ -82,23 +114,23 @@
 <!-- Content Information -->
 {% if content_info %}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Contenu de l'envoi</h2>
+    <h2 class="info-section-title">{{ _('pdf.content_info') }}</h2>
     <div class="info-grid">
         {% if content_info.subject %}
         <div class="info-row">
-            <span class="info-label">Objet</span>
+            <span class="info-label">{{ _('pdf.subject') }}</span>
             <span class="info-value">{{ content_info.subject }}</span>
         </div>
         {% endif %}
         {% if content_info.document_count %}
         <div class="info-row">
-            <span class="info-label">Nombre de documents</span>
+            <span class="info-label">{{ _('pdf.document_count') }}</span>
             <span class="info-value">{{ content_info.document_count }}</span>
         </div>
         {% endif %}
         {% if content_info.total_size %}
         <div class="info-row">
-            <span class="info-label">Taille totale</span>
+            <span class="info-label">{{ _('pdf.total_size') }}</span>
             <span class="info-value">{{ content_info.total_size }}</span>
         </div>
         {% endif %}
@@ -110,25 +142,25 @@
 <section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
     <h3 class="seal-title">
         {% if is_qualified %}
-        Sceau electronique qualifie
+        {{ _('pdf.seal_qualified') }}
         {% else %}
-        Sceau electronique (non qualifie - developpement)
+        {{ _('pdf.seal_non_qualified') }}
         {% endif %}
     </h3>
     <dl class="seal-details">
-        <dt>Algorithme de signature</dt>
+        <dt>{{ _('pdf.signature_algorithm') }}</dt>
         <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
 
-        <dt>Horodatage</dt>
+        <dt>{{ _('pdf.timestamp') }}</dt>
         <dd>{{ seal_timestamp|format_datetime if seal_timestamp else generated_at|format_datetime }}</dd>
 
         {% if content_hash %}
-        <dt>Empreinte du contenu (SHA-256)</dt>
+        <dt>{{ _('pdf.content_hash') }}</dt>
         <dd class="crypto-data">{{ content_hash }}</dd>
         {% endif %}
 
         {% if seal_id %}
-        <dt>Identifiant du sceau</dt>
+        <dt>{{ _('pdf.seal_id') }}</dt>
         <dd class="crypto-data">{{ seal_id }}</dd>
         {% endif %}
     </dl>
@@ -136,6 +168,5 @@
 {% endblock %}
 
 {% block verification_info %}
-Pour verifier l'authenticite de ce document, utilisez le service de verification QERDS
-avec l'identifiant {{ delivery_id }}.
+{{ _('pdf.verification_info') }} {{ delivery_id }}.
 {% endblock %}

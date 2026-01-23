@@ -523,3 +523,92 @@ class TestStyling:
         )
 
         assert result.content.startswith(b"%PDF")
+
+
+# ---------------------------------------------------------------------------
+# Internationalization Tests
+# ---------------------------------------------------------------------------
+class TestPDFI18n:
+    """Tests for PDF internationalization (i18n) support."""
+
+    def test_default_language_is_french(self, pdf_generator: PDFGenerator):
+        """Test that default language is French."""
+        assert pdf_generator.lang == "fr"
+
+    def test_language_parameter_accepted(self):
+        """Test that lang parameter is accepted in constructor."""
+        generator = PDFGenerator(lang="en")
+        assert generator.lang == "en"
+
+    def test_translator_function_in_context(self, pdf_generator: PDFGenerator):
+        """Test that translator function is passed to templates."""
+        # The base context should include the translator
+        context = pdf_generator._get_base_context()
+        assert "_" in context
+        assert callable(context["_"])
+
+    def test_lang_in_context(self, pdf_generator: PDFGenerator):
+        """Test that lang is included in template context."""
+        context = pdf_generator._get_base_context()
+        assert "lang" in context
+        assert context["lang"] == "fr"
+
+    def test_french_pdf_generation(self):
+        """Test PDF generation with French language."""
+        generator = PDFGenerator(lang="fr")
+        result = generator.render_proof(
+            template_name="proof_placeholder.html",
+            context={"delivery_id": "test-fr-123"},
+        )
+
+        assert result.content.startswith(b"%PDF")
+        assert result.page_count >= 1
+
+    def test_english_pdf_generation(self):
+        """Test PDF generation with English language."""
+        generator = PDFGenerator(lang="en")
+        result = generator.render_proof(
+            template_name="proof_placeholder.html",
+            context={"delivery_id": "test-en-123"},
+        )
+
+        assert result.content.startswith(b"%PDF")
+        assert result.page_count >= 1
+
+    def test_both_languages_generate_valid_pdfs(self):
+        """Test that both French and English generate valid PDFs."""
+        fr_generator = PDFGenerator(lang="fr")
+        en_generator = PDFGenerator(lang="en")
+
+        fr_result = fr_generator.render_proof(
+            template_name="proof_placeholder.html",
+            context={"delivery_id": "test-compare"},
+        )
+        en_result = en_generator.render_proof(
+            template_name="proof_placeholder.html",
+            context={"delivery_id": "test-compare"},
+        )
+
+        # Both should be valid PDFs
+        assert fr_result.content.startswith(b"%PDF")
+        assert en_result.content.startswith(b"%PDF")
+
+        # They should be different (different translations)
+        # Note: This may not always be true if translations result in same PDF
+        # but the key is both are valid
+
+    def test_deposit_proof_with_language(self, sample_delivery_context: dict):
+        """Test deposit proof generation with language parameter."""
+        for lang in ["fr", "en"]:
+            generator = PDFGenerator(lang=lang)
+            result = generator.generate_deposit_proof(
+                delivery_id="test-lang-deposit",
+                deposit_timestamp="2026-01-22T10:00:00Z",
+                sender_name="Test Sender",
+                recipient_name="Test Recipient",
+                recipient_email="test@example.com",
+                content_hash="abc123",
+            )
+
+            assert result.content.startswith(b"%PDF")
+            assert result.page_count >= 1

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if lang == 'fr' %}Lettre Recommandee Electronique{% else %}Electronic Registered Delivery{% endif %}</title>
+    <title>{{ _('email.service_tagline') }}</title>
     <style>
         /* Email-safe CSS */
         body {
@@ -150,11 +150,7 @@
         <!-- Header -->
         <div class="email-header">
             <h1>{{ provider_name }}</h1>
-            {% if lang == 'fr' %}
-            <p>Service de Lettre Recommandee Electronique Qualifiee</p>
-            {% else %}
-            <p>Qualified Electronic Registered Delivery Service</p>
-            {% endif %}
+            <p>{{ _('email.service_tagline') }}</p>
         </div>
 
         <!-- Body -->
@@ -165,26 +161,17 @@
             </div>
 
             <!-- Greeting -->
-            {% if lang == 'fr' %}
-            <p>Bonjour,</p>
-            <p>Vous avez recu une <strong>lettre recommandee electronique</strong> qui attend votre action.</p>
-            {% else %}
-            <p>Hello,</p>
-            <p>You have received an <strong>electronic registered delivery</strong> awaiting your action.</p>
-            {% endif %}
+            <p>{{ _('email.greeting') }}</p>
+            <p>{{ _('email.notification_body') }}</p>
 
             <!-- Delivery information -->
             <div class="delivery-info">
-                {% if lang == 'fr' %}
-                <h2>Informations de l'envoi</h2>
-                {% else %}
-                <h2>Delivery Information</h2>
-                {% endif %}
+                <h2>{{ _('email.delivery_info_title') }}</h2>
 
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a; width: 140px;">
-                            {% if lang == 'fr' %}Reference{% else %}Reference{% endif %}
+                            {{ _('email.reference_label') }}
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
                             <code style="background: #f0f0f5; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ delivery_ref }}</code>
@@ -192,7 +179,7 @@
                     </tr>
                     <tr>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
-                            {% if lang == 'fr' %}Operateur{% else %}Provider{% endif %}
+                            {{ _('email.provider_label') }}
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
                             {{ provider_name }}
@@ -200,10 +187,10 @@
                     </tr>
                     <tr>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
-                            {% if lang == 'fr' %}Nature{% else %}Type{% endif %}
+                            {{ _('email.nature_label') }}
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
-                            {% if lang == 'fr' %}Lettre Recommandee Electronique (LRE){% else %}Qualified Electronic Registered Delivery{% endif %}
+                            {{ _('email.nature_value') }}
                         </td>
                     </tr>
                 </table>
@@ -211,58 +198,32 @@
 
             <!-- Deadline warning -->
             <div class="deadline-box">
-                {% if lang == 'fr' %}
-                <h3>Date limite pour accepter ou refuser</h3>
-                {% else %}
-                <h3>Deadline to accept or refuse</h3>
-                {% endif %}
+                <h3>{{ _('email.deadline_title') }}</h3>
                 <div class="deadline-date">{{ deadline_formatted }}</div>
             </div>
 
             <!-- Call to action -->
             <div class="action-section">
                 <a href="{{ magic_link }}" class="action-button">
-                    {% if lang == 'fr' %}Consulter ma lettre recommandee{% else %}View my registered delivery{% endif %}
+                    {{ _('email.view_delivery_button') }}
                 </a>
                 <p class="action-note">
-                    {% if lang == 'fr' %}
-                    Une authentification sera requise pour acceder au contenu.
-                    {% else %}
-                    Authentication will be required to access the content.
-                    {% endif %}
+                    {{ _('email.auth_note') }}
                 </p>
             </div>
 
             <!-- Privacy notice - CPCE compliance: no sender info -->
             <div class="privacy-notice">
-                {% if lang == 'fr' %}
-                <h4>Note de confidentialite</h4>
-                <p>
-                    Conformement a la reglementation, l'identite de l'expediteur et le contenu de l'envoi
-                    ne sont pas reveles dans cette notification. Ces informations seront accessibles apres
-                    votre authentification sur la plateforme securisee.
-                </p>
-                {% else %}
-                <h4>Privacy Notice</h4>
-                <p>
-                    In accordance with regulations, the sender's identity and delivery content are not
-                    disclosed in this notification. This information will be accessible after you
-                    authenticate on the secure platform.
-                </p>
-                {% endif %}
+                <h4>{{ _('email.privacy_notice_title') }}</h4>
+                <p>{{ _('email.privacy_notice_body') }}</p>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="email-footer">
             <p class="provider-name">{{ provider_name }}</p>
-            {% if lang == 'fr' %}
-            <p>Service de Lettre Recommandee Electronique Qualifiee conforme au reglement eIDAS et au CPCE.</p>
-            <p>Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.</p>
-            {% else %}
-            <p>Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.</p>
-            <p>This email was sent automatically. Please do not reply.</p>
-            {% endif %}
+            <p>{{ _('email.footer_compliance') }}</p>
+            <p>{{ _('email.footer_auto_email') }}</p>
             <p style="font-size: 11px; color: #999999; margin-top: 16px;">
                 Template v{{ template_version }}
             </p>

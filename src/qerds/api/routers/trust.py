@@ -19,6 +19,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
+from qerds.api.i18n import DEFAULT_LANGUAGE, get_error_message
 from qerds.services.trust import (
     DualControlRequiredError,
     DualControlSameUserError,
@@ -370,7 +371,7 @@ async def get_trust_service() -> TrustService:
     if _trust_service is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Trust service not initialized",
+            detail=get_error_message("trust_service_not_initialized", DEFAULT_LANGUAGE),
         )
     return _trust_service
 
@@ -435,7 +436,7 @@ async def seal_data(
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid base64 encoding in data field",
+                detail=get_error_message("invalid_base64", DEFAULT_LANGUAGE),
             ) from e
 
         # Seal the data
@@ -467,7 +468,7 @@ async def seal_data(
     except QualifiedModeNotImplementedError as e:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Qualified mode requires HSM integration (not yet implemented)",
+            detail=get_error_message("hsm_required", DEFAULT_LANGUAGE),
         ) from e
     except TrustServiceError as e:
         logger.error("Seal operation failed: %s", str(e))
@@ -503,7 +504,7 @@ async def create_timestamp(
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid base64 encoding in data field",
+                detail=get_error_message("invalid_base64", DEFAULT_LANGUAGE),
             ) from e
 
         # Create timestamp

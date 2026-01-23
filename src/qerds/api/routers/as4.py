@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from qerds.api.i18n import get_error_message, get_language
 from qerds.services.as4_receiver import (
     AS4MessageHandler,
     AS4MessageMetadata,
@@ -150,7 +151,7 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 
 async def verify_domibus_webhook(
-    request: Request,  # noqa: ARG001 - reserved for future signature verification
+    request: Request,
     x_domibus_signature: Annotated[str | None, Header()] = None,
 ) -> None:
     """Verify the Domibus webhook signature.
@@ -175,9 +176,10 @@ async def verify_domibus_webhook(
         return
 
     if not x_domibus_signature:
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-Domibus-Signature header",
+            detail=get_error_message("missing_signature_header", lang),
         )
 
     # NOTE: Production implementation should verify HMAC signature

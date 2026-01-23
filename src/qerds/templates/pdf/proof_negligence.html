@@ -33,49 +33,50 @@
   - is_qualified: Whether this is a qualified service
   - qualification_mode: "qualified" or "non_qualified"
   - generated_at: Document generation timestamp
+  - _: Translation function
+  - lang: Current language code
 #}
 
-{% block title %}Preuve de Negligence - {{ delivery_id }}{% endblock %}
+{% block title %}{{ _('pdf.negligence_proof_title') }} - {{ delivery_id }}{% endblock %}
 
-{% block page_header %}Preuve de Negligence - {{ delivery_id }}{% endblock %}
+{% block page_header %}{{ _('pdf.negligence_proof_title') }} - {{ delivery_id }}{% endblock %}
 
 {% block body_class %}proof-negligence{% endblock %}
 
 {% block content %}
-<h1 class="document-title">Preuve de Negligence</h1>
+<h1 class="document-title">{{ _('pdf.negligence_proof_title') }}</h1>
 <p class="document-subtitle">
-    Lettre Recommandee Electronique {% if is_qualified %}Qualifiee{% else %}(Mode developpement){% endif %}
+    {% if is_qualified %}{{ _('pdf.lre_subtitle_qualified') }}{% else %}{{ _('pdf.lre_subtitle_dev') }}{% endif %}
 </p>
 
 {# Summary Notice - explains what this document attests #}
 <section class="info-section avoid-break">
     <div class="qualification-notice {% if is_qualified %}qualification-notice--qualified{% else %}qualification-notice--dev{% endif %}">
         <p>
-            <strong>Attestation de non-retrait</strong> : Le destinataire n'a pas retire l'envoi
-            dans le delai legal de 15 jours suivant la notification.
+            <strong>{{ _('pdf.non_claim_notice') }}</strong> : {{ _('pdf.non_claim_notice_text') }}
         </p>
     </div>
 </section>
 
 {# Delivery Reference Section #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Reference de l'envoi</h2>
+    <h2 class="info-section-title">{{ _('pdf.delivery_reference') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-label">{{ _('pdf.delivery_id') }}</span>
             <span class="info-value text-mono">{{ delivery_id }}</span>
         </div>
         {% if subject %}
         <div class="info-row">
-            <span class="info-label">Objet</span>
+            <span class="info-label">{{ _('pdf.subject') }}</span>
             <span class="info-value">{{ subject }}</span>
         </div>
         {% endif %}
         <div class="info-row">
-            <span class="info-label">Statut</span>
+            <span class="info-label">{{ _('pdf.status') }}</span>
             <span class="info-value">
                 <span class="status-badge status-badge--warning">
-                    Non retire - Expire
+                    {{ _('pdf.status_non_claimed') }}
                 </span>
             </span>
         </div>
@@ -84,50 +85,50 @@
 
 {# Timeline Section - Critical dates for legal proof #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Chronologie de l'envoi</h2>
+    <h2 class="info-section-title">{{ _('pdf.timeline_delivery') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Date et heure de depot</span>
-            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.deposit_date_time') }}</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else _('pdf.not_available') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date et heure de notification</span>
-            <span class="info-value">{{ notification_timestamp|format_datetime if notification_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.notification_date') }}</span>
+            <span class="info-value">{{ notification_timestamp|format_datetime if notification_timestamp else _('pdf.not_available') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date et heure d'expiration</span>
-            <span class="info-value">{{ expiry_timestamp|format_datetime if expiry_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.expiry_date') }}</span>
+            <span class="info-value">{{ expiry_timestamp|format_datetime if expiry_timestamp else _('pdf.not_available') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Delai de retrait</span>
-            <span class="info-value">15 jours (Article L.100 CPCE)</span>
+            <span class="info-label">{{ _('pdf.withdrawal_deadline') }}</span>
+            <span class="info-value">{{ _('pdf.withdrawal_deadline_article') }}</span>
         </div>
     </div>
 </section>
 
 {# Sender Information Section #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Expediteur</h2>
+    <h2 class="info-section-title">{{ _('pdf.sender_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identite</span>
-            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.identity') }}</span>
+            <span class="info-value">{{ sender_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if sender_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ sender_organization }}</span>
         </div>
         {% endif %}
         {% if sender_email %}
         <div class="info-row">
-            <span class="info-label">Adresse e-mail</span>
+            <span class="info-label">{{ _('pdf.email_address') }}</span>
             <span class="info-value">{{ sender_email }}</span>
         </div>
         {% endif %}
         {% if sender_address %}
         <div class="info-row">
-            <span class="info-label">Adresse</span>
+            <span class="info-label">{{ _('pdf.address') }}</span>
             <span class="info-value">{{ sender_address }}</span>
         </div>
         {% endif %}
@@ -136,25 +137,25 @@
 
 {# Recipient Information Section (revealed after expiry per CPCE) #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Destinataire</h2>
+    <h2 class="info-section-title">{{ _('pdf.recipient_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identite</span>
-            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.identity') }}</span>
+            <span class="info-value">{{ recipient_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if recipient_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ recipient_organization }}</span>
         </div>
         {% endif %}
         <div class="info-row">
-            <span class="info-label">Adresse e-mail</span>
-            <span class="info-value">{{ recipient_email|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.email_address') }}</span>
+            <span class="info-value">{{ recipient_email|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if recipient_address %}
         <div class="info-row">
-            <span class="info-label">Adresse</span>
+            <span class="info-label">{{ _('pdf.address') }}</span>
             <span class="info-value">{{ recipient_address }}</span>
         </div>
         {% endif %}
@@ -164,16 +165,15 @@
 {# Content Integrity Section #}
 {% if content_hash %}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Integrite du contenu</h2>
+    <h2 class="info-section-title">{{ _('pdf.content_integrity') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Empreinte numerique (SHA-256)</span>
+            <span class="info-label">{{ _('pdf.digital_fingerprint') }}</span>
             <span class="info-value crypto-data">{{ content_hash }}</span>
         </div>
     </div>
     <p class="text-small text-muted mt-2">
-        Cette empreinte permet de verifier que le contenu de l'envoi n'a pas ete modifie
-        depuis son depot.
+        {{ _('pdf.fingerprint_note') }}
     </p>
 </section>
 {% endif %}
@@ -182,20 +182,20 @@
 <section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
     <h3 class="seal-title">
         {% if is_qualified %}
-        Sceau electronique qualifie du prestataire
+        {{ _('pdf.seal_qualified') }}
         {% else %}
-        Sceau electronique (non qualifie - developpement)
+        {{ _('pdf.seal_non_qualified') }}
         {% endif %}
     </h3>
     <dl class="seal-details">
-        <dt>Algorithme de signature</dt>
+        <dt>{{ _('pdf.signature_algorithm') }}</dt>
         <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
 
-        <dt>Horodatage du sceau</dt>
+        <dt>{{ _('pdf.seal_timestamp') }}</dt>
         <dd>{{ seal_timestamp|format_datetime if seal_timestamp else expiry_timestamp|format_datetime if expiry_timestamp else generated_at|format_datetime }}</dd>
 
         {% if seal_id %}
-        <dt>Identifiant du sceau</dt>
+        <dt>{{ _('pdf.seal_id') }}</dt>
         <dd class="text-mono">{{ seal_id }}</dd>
         {% endif %}
     </dl>
@@ -204,29 +204,29 @@
 {# Timestamp Authority Info Section #}
 {% if tsa_info or is_qualified %}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Autorite d'horodatage</h2>
+    <h2 class="info-section-title">{{ _('pdf.timestamp_authority') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Service d'horodatage</span>
+            <span class="info-label">{{ _('pdf.timestamp_service') }}</span>
             <span class="info-value">
                 {% if tsa_info and tsa_info.name %}
                     {{ tsa_info.name }}
                 {% elif is_qualified %}
-                    Service d'horodatage qualifie eIDAS
+                    {{ _('pdf.timestamp_qualified') }}
                 {% else %}
-                    Service d'horodatage (developpement)
+                    {{ _('pdf.timestamp_dev') }}
                 {% endif %}
             </span>
         </div>
         {% if tsa_info and tsa_info.policy_oid %}
         <div class="info-row">
-            <span class="info-label">Politique (OID)</span>
+            <span class="info-label">{{ _('pdf.policy_oid') }}</span>
             <span class="info-value text-mono">{{ tsa_info.policy_oid }}</span>
         </div>
         {% endif %}
         {% if tsa_info and tsa_info.token_id %}
         <div class="info-row">
-            <span class="info-label">Identifiant du jeton</span>
+            <span class="info-label">{{ _('pdf.token_id') }}</span>
             <span class="info-value text-mono">{{ tsa_info.token_id }}</span>
         </div>
         {% endif %}
@@ -236,26 +236,25 @@
 
 {# Verification Instructions Section #}
 <section class="verification-section avoid-break">
-    <h2 class="info-section-title">Verification de la preuve</h2>
+    <h2 class="info-section-title">{{ _('pdf.verification_section') }}</h2>
     <div class="verification-content">
         <p class="verification-instruction">
-            Pour verifier l'authenticite de cette preuve de negligence, utilisez le service
-            de verification QERDS avec les informations suivantes :
+            {{ _('pdf.verification_instruction') }}
         </p>
         <div class="info-grid">
             {% if proof_id %}
             <div class="info-row">
-                <span class="info-label">Identifiant de la preuve</span>
+                <span class="info-label">{{ _('pdf.proof_id') }}</span>
                 <span class="info-value text-mono">{{ proof_id }}</span>
             </div>
             {% endif %}
             <div class="info-row">
-                <span class="info-label">Reference de l'envoi</span>
+                <span class="info-label">{{ _('pdf.delivery_reference') }}</span>
                 <span class="info-value text-mono">{{ delivery_id }}</span>
             </div>
             {% if verification_url %}
             <div class="info-row">
-                <span class="info-label">URL de verification</span>
+                <span class="info-label">{{ _('pdf.verification_url') }}</span>
                 <span class="info-value">{{ verification_url }}</span>
             </div>
             {% endif %}
@@ -267,29 +266,22 @@
 <section class="qualification-section avoid-break">
     {% if is_qualified %}
     <div class="qualification-notice qualification-notice--qualified">
-        <h3>Service de Lettre Recommandee Electronique Qualifie</h3>
+        <h3>{{ _('pdf.qualified_service_title') }}</h3>
         <p>
-            Cette preuve de negligence est emise par un prestataire de services de confiance
-            qualifie conformement au reglement (UE) n 910/2014 (eIDAS) et au Code des
-            Postes et des Communications Electroniques (CPCE).
+            {{ _('pdf.qualified_negligence_notice') }}
         </p>
         <p>
-            Elle atteste que le destinataire n'a pas retire l'envoi recommande electronique
-            dans le delai legal de 15 jours suivant la notification, conformement a l'article
-            L.100 du CPCE. L'envoi est repute avoir ete presente au destinataire.
+            {{ _('pdf.qualified_negligence_attestation') }}
         </p>
     </div>
     {% else %}
     <div class="qualification-notice qualification-notice--dev">
-        <h3>Mode developpement - Service non qualifie</h3>
+        <h3>{{ _('pdf.dev_mode_title') }}</h3>
         <p>
-            <strong>ATTENTION :</strong> Cette preuve a ete generee en mode
-            developpement. Elle n'a pas de valeur juridique et ne constitue pas
-            une preuve qualifiee au sens du reglement eIDAS.
+            {{ _('pdf.dev_mode_warning') }}
         </p>
         <p>
-            Pour des envois ayant valeur legale, utilisez un service de Lettre
-            Recommandee Electronique Qualifiee (LREQ).
+            {{ _('pdf.dev_mode_recommendation') }}
         </p>
     </div>
     {% endif %}
@@ -297,7 +289,5 @@
 {% endblock %}
 
 {% block verification_info %}
-Pour verifier l'authenticite de cette preuve de negligence, utilisez le service de
-verification QERDS avec l'identifiant {{ delivery_id }}{% if proof_id %} et la
-reference de preuve {{ proof_id }}{% endif %}.
+{{ _('pdf.verification_info') }} {{ delivery_id }}{% if proof_id %} ({{ proof_id }}){% endif %}.
 {% endblock %}

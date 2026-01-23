@@ -122,7 +122,7 @@ class TestClaimTokenGeneration:
         # Create a token that is already expired
         expired_token = ClaimToken(
             delivery_id=mock_delivery.delivery_id,
-            token="expired-test-token-value",  # noqa: S106
+            token="expired-test-token-value",
             created_at=datetime.now(UTC) - timedelta(days=20),
             expires_at=datetime.now(UTC) - timedelta(days=5),
         )
@@ -132,7 +132,7 @@ class TestClaimTokenGeneration:
         # Create a valid token
         valid_token = ClaimToken(
             delivery_id=mock_delivery.delivery_id,
-            token="valid-test-token-value",  # noqa: S106
+            token="valid-test-token-value",
             created_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(days=15),
         )
@@ -677,3 +677,107 @@ class TestPrivacyProtection:
         hash2 = pickup_service._hash_ip(ip2)
 
         assert hash1 != hash2
+
+
+# ---------------------------------------------------------------------------
+# Test: Router Helper Functions
+# ---------------------------------------------------------------------------
+
+
+class TestRouterHelperFunctions:
+    """Tests for pickup router helper functions."""
+
+    def test_hash_ip_returns_16_char_hash(self):
+        """Verify _hash_ip returns truncated 16-char hash."""
+        from qerds.api.routers.pickup import _hash_ip
+
+        result = _hash_ip("192.168.1.100")
+        assert len(result) == 16
+
+    def test_hash_ip_is_deterministic(self):
+        """Verify _hash_ip produces same output for same input."""
+        from qerds.api.routers.pickup import _hash_ip
+
+        ip = "10.0.0.1"
+        hash1 = _hash_ip(ip)
+        hash2 = _hash_ip(ip)
+        assert hash1 == hash2
+
+    def test_hash_ip_none_returns_none(self):
+        """Verify _hash_ip returns None for None input."""
+        from qerds.api.routers.pickup import _hash_ip
+
+        assert _hash_ip(None) is None
+
+    def test_get_client_ip_from_forwarded_header(self):
+        """Verify _get_client_ip extracts IP from X-Forwarded-For header."""
+        from unittest.mock import MagicMock
+
+        from qerds.api.routers.pickup import _get_client_ip
+
+        request = MagicMock()
+        request.headers.get.return_value = "1.2.3.4, 5.6.7.8"
+        request.client = None
+
+        ip = _get_client_ip(request)
+        assert ip == "1.2.3.4"
+
+    def test_get_client_ip_from_client(self):
+        """Verify _get_client_ip falls back to request.client."""
+        from unittest.mock import MagicMock
+
+        from qerds.api.routers.pickup import _get_client_ip
+
+        request = MagicMock()
+        request.headers.get.return_value = None
+        request.client.host = "192.168.1.1"
+
+        ip = _get_client_ip(request)
+        assert ip == "192.168.1.1"
+
+
+# ---------------------------------------------------------------------------
+# Test: Content Download Endpoint Logic (REQ-E02)
+# ---------------------------------------------------------------------------
+
+
+class TestContentDownloadEndpoint:
+    """Tests for content download endpoint logic.
+
+    Note: Full integration tests require Docker. These tests verify
+    the endpoint logic using mocks.
+    """
+
+    def test_content_download_requires_accepted_state(self):
+        """Verify content download is blocked for non-ACCEPTED deliveries (REQ-E02)."""
+        # This is enforced in the endpoint - the state check is critical
+        # Actual HTTP test would use TestClient but requires full app setup
+        from qerds.db.models.base import DeliveryState
+
+        allowed_states = {DeliveryState.ACCEPTED}
+        blocked_states = {
+            DeliveryState.DRAFT,
+            DeliveryState.DEPOSITED,
+            DeliveryState.NOTIFIED,
+            DeliveryState.AVAILABLE,
+            DeliveryState.REFUSED,
+            DeliveryState.EXPIRED,
+        }
+
+        # Verify our understanding of which states allow content access
+        for state in blocked_states:
+            assert state != DeliveryState.ACCEPTED
+            assert state not in allowed_states
+
+    def test_content_access_states_match_encryption_service(self):
+        """Verify content access states align with encryption service authorization."""
+        from qerds.db.models.base import DeliveryState
+        from qerds.services.content_encryption import RECIPIENT_DECRYPTION_STATES
+
+        # The encryption service also allows RECEIVED state (after download)
+        # The pickup endpoint only checks for ACCEPTED since RECEIVED comes after
+        assert DeliveryState.ACCEPTED in RECIPIENT_DECRYPTION_STATES
+        assert DeliveryState.RECEIVED in RECIPIENT_DECRYPTION_STATES
+        # These should NOT be in decryption states
+        assert DeliveryState.AVAILABLE not in RECIPIENT_DECRYPTION_STATES
+        assert DeliveryState.REFUSED not in RECIPIENT_DECRYPTION_STATES

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from qerds.api.i18n import get_error_message, get_language
 from qerds.api.middleware.auth import (
     SESSION_COOKIE_NAME,
     AuthenticatedUser,
@@ -124,9 +125,10 @@ async def login(
     service = create_franceconnect_service_from_settings()
     if service is None:
         logger.warning("OIDC login attempted but service not configured")
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OIDC authentication is not configured",
+            detail=get_error_message("oidc_not_configured", lang),
         )
 
     try:
@@ -199,16 +201,18 @@ async def callback(
     stored_request = _pending_auth_requests.pop(state, None)
     if stored_request is None:
         logger.warning("OIDC callback with unknown state")
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired authentication request",
+            detail=get_error_message("auth_request_invalid", lang),
         )
 
     service = create_franceconnect_service_from_settings()
     if service is None:
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OIDC authentication is not configured",
+            detail=get_error_message("oidc_not_configured", lang),
         )
 
     try:
@@ -248,23 +252,26 @@ async def callback(
 
     except OIDCStateError as e:
         logger.warning("OIDC state validation failed: %s", e)
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Authentication request expired or invalid",
+            detail=get_error_message("auth_request_expired", lang),
         ) from e
 
     except OIDCTokenError as e:
         logger.error("OIDC token exchange failed: %s", e)
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed during token exchange",
+            detail=get_error_message("auth_token_exchange_failed", lang),
         ) from e
 
     except OIDCAuthenticationError as e:
         logger.error("OIDC identity verification failed: %s", e)
+        lang = get_language(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Identity verification failed",
+            detail=get_error_message("identity_verification_failed", lang),
         ) from e
 
     except OIDCError as e:

@@ -32,47 +32,49 @@
   - is_qualified: Whether this is a qualified service
   - qualification_mode: "qualified" or "non_qualified"
   - generated_at: Document generation timestamp
+  - _: Translation function
+  - lang: Current language code
 #}
 
-{% block title %}Preuve de Refus - {{ delivery_id }}{% endblock %}
+{% block title %}{{ _('pdf.refusal_proof_title') }} - {{ delivery_id }}{% endblock %}
 
-{% block page_header %}Preuve de Refus - {{ delivery_id }}{% endblock %}
+{% block page_header %}{{ _('pdf.refusal_proof_title') }} - {{ delivery_id }}{% endblock %}
 
 {% block body_class %}proof-refusal{% endblock %}
 
 {% block content %}
-<h1 class="document-title">Preuve de Refus</h1>
+<h1 class="document-title">{{ _('pdf.refusal_proof_title') }}</h1>
 <p class="document-subtitle">
-    Lettre Recommandee Electronique {% if is_qualified %}Qualifiee{% else %}(Mode developpement){% endif %}
+    {% if is_qualified %}{{ _('pdf.lre_subtitle_qualified') }}{% else %}{{ _('pdf.lre_subtitle_dev') }}{% endif %}
 </p>
 
 {# Delivery Reference Section #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Reference de l'envoi</h2>
+    <h2 class="info-section-title">{{ _('pdf.delivery_reference') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identifiant de l'envoi</span>
+            <span class="info-label">{{ _('pdf.delivery_id') }}</span>
             <span class="info-value text-mono">{{ delivery_id }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date de depot</span>
-            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.deposit_date') }}</span>
+            <span class="info-value">{{ deposit_timestamp|format_datetime if deposit_timestamp else _('pdf.not_available') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date de refus</span>
-            <span class="info-value">{{ refusal_timestamp|format_datetime if refusal_timestamp else 'Non disponible' }}</span>
+            <span class="info-label">{{ _('pdf.refusal_date') }}</span>
+            <span class="info-value">{{ refusal_timestamp|format_datetime if refusal_timestamp else _('pdf.not_available') }}</span>
         </div>
         {% if subject %}
         <div class="info-row">
-            <span class="info-label">Objet</span>
+            <span class="info-label">{{ _('pdf.subject') }}</span>
             <span class="info-value">{{ subject }}</span>
         </div>
         {% endif %}
         <div class="info-row">
-            <span class="info-label">Statut</span>
+            <span class="info-label">{{ _('pdf.status') }}</span>
             <span class="info-value">
                 <span class="status-badge status-badge--error">
-                    Refuse
+                    {{ _('pdf.status_refused') }}
                 </span>
             </span>
         </div>
@@ -81,27 +83,27 @@
 
 {# Sender Information Section #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Expediteur</h2>
+    <h2 class="info-section-title">{{ _('pdf.sender_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Nom</span>
-            <span class="info-value">{{ sender_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.name') }}</span>
+            <span class="info-value">{{ sender_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if sender_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ sender_organization }}</span>
         </div>
         {% endif %}
         {% if sender_email %}
         <div class="info-row">
-            <span class="info-label">Email</span>
+            <span class="info-label">{{ _('pdf.email') }}</span>
             <span class="info-value">{{ sender_email }}</span>
         </div>
         {% endif %}
         {% if sender_address %}
         <div class="info-row">
-            <span class="info-label">Adresse</span>
+            <span class="info-label">{{ _('pdf.address') }}</span>
             <span class="info-value">{{ sender_address }}</span>
         </div>
         {% endif %}
@@ -110,27 +112,27 @@
 
 {# Recipient Information Section (revealed after refusal per CPCE) #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Destinataire</h2>
+    <h2 class="info-section-title">{{ _('pdf.recipient_info') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Nom</span>
-            <span class="info-value">{{ recipient_name|default('Non specifie') }}</span>
+            <span class="info-label">{{ _('pdf.name') }}</span>
+            <span class="info-value">{{ recipient_name|default(_('pdf.not_specified')) }}</span>
         </div>
         {% if recipient_organization %}
         <div class="info-row">
-            <span class="info-label">Organisation</span>
+            <span class="info-label">{{ _('pdf.organization') }}</span>
             <span class="info-value">{{ recipient_organization }}</span>
         </div>
         {% endif %}
         {% if recipient_email %}
         <div class="info-row">
-            <span class="info-label">Email</span>
+            <span class="info-label">{{ _('pdf.email') }}</span>
             <span class="info-value">{{ recipient_email }}</span>
         </div>
         {% endif %}
         {% if recipient_address %}
         <div class="info-row">
-            <span class="info-label">Adresse</span>
+            <span class="info-label">{{ _('pdf.address') }}</span>
             <span class="info-value">{{ recipient_address }}</span>
         </div>
         {% endif %}
@@ -140,14 +142,14 @@
 {# Content Hash/Digest Section #}
 {% if content_hash %}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Empreinte numerique du contenu</h2>
+    <h2 class="info-section-title">{{ _('pdf.content_integrity') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Algorithme</span>
+            <span class="info-label">{{ _('pdf.algorithm') }}</span>
             <span class="info-value">{{ hash_algorithm|default('SHA-256') }}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Empreinte</span>
+            <span class="info-label">{{ _('pdf.fingerprint') }}</span>
             <span class="info-value crypto-data">{{ content_hash }}</span>
         </div>
     </div>
@@ -158,23 +160,23 @@
 <section class="seal-section {% if is_qualified %}seal-qualified{% else %}seal-non-qualified{% endif %} avoid-break">
     <h3 class="seal-title">
         {% if is_qualified %}
-        Sceau electronique qualifie du prestataire
+        {{ _('pdf.seal_qualified') }}
         {% else %}
-        Sceau electronique (non qualifie - developpement)
+        {{ _('pdf.seal_non_qualified') }}
         {% endif %}
     </h3>
     <dl class="seal-details">
-        <dt>Prestataire</dt>
+        <dt>{{ _('pdf.provider') }}</dt>
         <dd>{{ provider_name|default('QERDS') }}</dd>
 
-        <dt>Algorithme de signature</dt>
+        <dt>{{ _('pdf.signature_algorithm') }}</dt>
         <dd>{{ signature_algorithm|default('Ed25519') }}</dd>
 
-        <dt>Horodatage du refus</dt>
+        <dt>{{ _('pdf.refusal_timestamp') }}</dt>
         <dd>{{ refusal_timestamp|format_datetime if refusal_timestamp else generated_at|format_datetime }}</dd>
 
         {% if seal_id %}
-        <dt>Identifiant du sceau</dt>
+        <dt>{{ _('pdf.seal_id') }}</dt>
         <dd class="crypto-data">{{ seal_id }}</dd>
         {% endif %}
     </dl>
@@ -183,21 +185,21 @@
 {# Timestamp Authority Information Section #}
 {% if timestamp_authority %}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Autorite d'horodatage</h2>
+    <h2 class="info-section-title">{{ _('pdf.timestamp_authority') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Nom de l'autorite</span>
-            <span class="info-value">{{ timestamp_authority.name|default('Non disponible') }}</span>
+            <span class="info-label">{{ _('pdf.timestamp_authority_name') }}</span>
+            <span class="info-value">{{ timestamp_authority.name|default(_('pdf.not_available')) }}</span>
         </div>
         {% if timestamp_authority.policy_oid %}
         <div class="info-row">
-            <span class="info-label">OID de politique</span>
+            <span class="info-label">{{ _('pdf.policy_oid') }}</span>
             <span class="info-value text-mono">{{ timestamp_authority.policy_oid }}</span>
         </div>
         {% endif %}
         {% if timestamp_authority.serial_number %}
         <div class="info-row">
-            <span class="info-label">Numero de serie</span>
+            <span class="info-label">{{ _('pdf.serial_number') }}</span>
             <span class="info-value text-mono">{{ timestamp_authority.serial_number }}</span>
         </div>
         {% endif %}
@@ -207,22 +209,21 @@
 
 {# Verification Instructions Section #}
 <section class="info-section avoid-break">
-    <h2 class="info-section-title">Verification de ce document</h2>
+    <h2 class="info-section-title">{{ _('pdf.verification_section') }}</h2>
     <div class="info-grid">
         <div class="info-row">
-            <span class="info-label">Identifiant de preuve</span>
+            <span class="info-label">{{ _('pdf.proof_id') }}</span>
             <span class="info-value text-mono">{{ proof_id|default(delivery_id) }}</span>
         </div>
         {% if verification_url %}
         <div class="info-row">
-            <span class="info-label">URL de verification</span>
+            <span class="info-label">{{ _('pdf.verification_url') }}</span>
             <span class="info-value">{{ verification_url }}</span>
         </div>
         {% endif %}
     </div>
     <p class="text-small text-muted mt-2">
-        Pour verifier l'authenticite de ce document, rendez-vous sur le portail de verification QERDS
-        et saisissez l'identifiant de preuve ci-dessus.
+        {{ _('pdf.verification_portal_note') }}
     </p>
 </section>
 
@@ -230,17 +231,14 @@
 <section class="info-section avoid-break mt-4">
     <div class="qualification-notice {% if is_qualified %}qualification-notice--qualified{% else %}qualification-notice--dev{% endif %}">
         {% if is_qualified %}
-        <p><strong>Service qualifie eIDAS</strong></p>
+        <p><strong>{{ _('pdf.qualified_service_eidas') }}</strong></p>
         <p class="text-small">
-            Cette preuve de refus a ete emise par un service de lettre recommandee electronique
-            qualifie au sens du reglement (UE) n 910/2014 (eIDAS) et conforme aux dispositions du
-            Code des Postes et des Communications Electroniques (CPCE).
+            {{ _('pdf.qualified_refusal_notice') }}
         </p>
         {% else %}
-        <p><strong>Mode developpement - Non qualifie</strong></p>
+        <p><strong>{{ _('pdf.dev_mode_title') }}</strong></p>
         <p class="text-small">
-            Ce document a ete genere en mode developpement et n'a pas de valeur juridique.
-            Il ne constitue pas une preuve qualifiee au sens du reglement eIDAS.
+            {{ _('pdf.dev_mode_warning') }}
         </p>
         {% endif %}
     </div>
@@ -248,6 +246,5 @@
 {% endblock %}
 
 {% block verification_info %}
-Pour verifier l'authenticite de ce document, utilisez le service de verification QERDS
-avec l'identifiant de preuve {{ proof_id|default(delivery_id) }}{% if verification_url %} ou consultez {{ verification_url }}{% endif %}.
+{{ _('pdf.verification_info') }} {{ proof_id|default(delivery_id) }}{% if verification_url %} ({{ verification_url }}){% endif %}.
 {% endblock %}

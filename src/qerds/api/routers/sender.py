@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from qerds.api.i18n import DEFAULT_LANGUAGE, get_error_message
 from qerds.api.middleware.auth import AuthenticatedUser, require_role
 from qerds.api.schemas.sender import (
     ContentObjectResponse,
@@ -347,7 +348,7 @@ async def upload_content(
     if len(expected_hash) != 64:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SHA-256 hash must be 64 hex characters",
+            detail=get_error_message("hash_invalid", DEFAULT_LANGUAGE),
         )
 
     # Read and hash the uploaded content
@@ -366,7 +367,7 @@ async def upload_content(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Content hash mismatch: provided SHA-256 does not match uploaded content",
+            detail=get_error_message("hash_mismatch", DEFAULT_LANGUAGE),
         )
 
     # Generate content object ID early so we can use it for encryption AAD
@@ -396,7 +397,7 @@ async def upload_content(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to encrypt content for storage",
+            detail=get_error_message("encryption_failed", DEFAULT_LANGUAGE),
         ) from e
 
     # Upload encrypted content to object store
@@ -502,7 +503,7 @@ async def deposit_delivery(
     if not delivery.content_objects:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Delivery must have at least one content object before deposit",
+            detail=get_error_message("content_required", DEFAULT_LANGUAGE),
         )
 
     # Collect content hashes for evidence
@@ -796,7 +797,7 @@ async def download_proof(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate proof PDF",
+            detail=get_error_message("pdf_generation_failed", DEFAULT_LANGUAGE),
         ) from e
 
 
@@ -887,7 +888,7 @@ async def download_sender_content(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve content from storage",
+            detail=get_error_message("storage_retrieval_failed", DEFAULT_LANGUAGE),
         ) from e
 
     # Decrypt content if encryption metadata is present (REQ-E01)
@@ -914,7 +915,7 @@ async def download_sender_content(
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to decrypt content",
+                detail=get_error_message("decryption_failed", DEFAULT_LANGUAGE),
             ) from e
 
     logger.info(

@@ -29,6 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from qerds.api.i18n import DEFAULT_LANGUAGE, get_error_message
 from qerds.api.middleware.auth import AuthenticatedUser, require_role
 from qerds.api.schemas.admin import (
     AccessReviewExportResponse,
@@ -3525,7 +3526,7 @@ async def update_vulnerability_finding(
                 if not request_body.exception_reason:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="exception_reason required when status is 'excepted'",
+                        detail=get_error_message("validation_error", DEFAULT_LANGUAGE),
                     )
                 finding.exception_approved_by = user.principal_id
                 finding.exception_reason = request_body.exception_reason

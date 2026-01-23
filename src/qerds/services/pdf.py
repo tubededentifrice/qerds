@@ -7,10 +7,14 @@ WeasyPrint is used for its excellent CSS support and ability to embed fonts,
 ensuring consistent rendering across environments. PDFs are generated from
 Jinja2 HTML templates with PDF-specific styling.
 
+The service supports internationalization (i18n) via the `lang` parameter,
+using translation keys from the "pdf" namespace in locale files. Templates
+receive a `_()` function for translating strings.
+
 Example:
     from qerds.services.pdf import PDFGenerator
 
-    generator = PDFGenerator()
+    generator = PDFGenerator(lang="fr")
 
     # Render a proof document
     pdf_bytes = generator.render_proof(
@@ -30,10 +34,15 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import CSS, HTML
+
+from qerds.api.i18n import DEFAULT_LANGUAGE, create_translator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +124,7 @@ class PDFGenerator:
         *,
         qualification_mode: str = "non_qualified",
         base_url: str | None = None,
+        lang: str = DEFAULT_LANGUAGE,
     ) -> None:
         """Initialize the PDF generator.
 
@@ -127,11 +137,17 @@ class PDFGenerator:
                 Controls the seal visualization and compliance badges.
             base_url: Base URL for resolving relative URLs in templates
                 (e.g., for images). If None, uses template_dir.
+            lang: Language code for translations (e.g., "fr", "en").
+                Defaults to the system default language.
         """
         self._template_dir = Path(template_dir) if template_dir else DEFAULT_TEMPLATE_DIR
         self._css_path = Path(css_path) if css_path else DEFAULT_CSS_PATH
         self._qualification_mode = qualification_mode
         self._base_url = base_url or f"file://{self._template_dir}/"
+        self._lang = lang
+
+        # Create translator function bound to the specified language
+        self._translator: Callable[[str], str] = create_translator(lang)
 
         # Initialize Jinja2 environment with autoescape for HTML
         self._env = Environment(
@@ -149,9 +165,10 @@ class PDFGenerator:
             self._css = CSS(filename=str(self._css_path))
 
         logger.debug(
-            "Initialized PDFGenerator: template_dir=%s, qualification_mode=%s",
+            "Initialized PDFGenerator: template_dir=%s, qualification_mode=%s, lang=%s",
             self._template_dir,
             self._qualification_mode,
+            self._lang,
         )
 
     @staticmethod
@@ -231,13 +248,21 @@ class PDFGenerator:
         """Build the base context available to all templates.
 
         Returns:
-            Dictionary with common template variables.
+            Dictionary with common template variables including:
+            - qualification_mode: "qualified" or "non_qualified"
+            - is_qualified: Boolean for conditional rendering
+            - generated_at: ISO 8601 generation timestamp
+            - generator_version: Version string
+            - _: Translation function bound to the configured language
+            - lang: Current language code
         """
         return {
             "qualification_mode": self._qualification_mode,
             "is_qualified": self._qualification_mode == "qualified",
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "generator_version": "1.0.0",
+            "_": self._translator,
+            "lang": self._lang,
         }
 
     def render_proof(
@@ -807,3 +832,8 @@ class PDFGenerator:
     def template_dir(self) -> Path:
         """Get the template directory path."""
         return self._template_dir
+
+    @property
+    def lang(self) -> str:
+        """Get the current language code."""
+        return self._lang

@@ -1,92 +1,40 @@
-{% if lang == 'fr' %}
 ================================================================================
-{{ provider_name }} - Service de Lettre Recommandee Electronique Qualifiee
-================================================================================
-
-{{ legal_nature }}
-
---------------------------------------------------------------------------------
-
-Bonjour,
-
-Vous avez recu une LETTRE RECOMMANDEE ELECTRONIQUE qui attend votre action.
-
-INFORMATIONS DE L'ENVOI
------------------------
-Reference : {{ delivery_ref }}
-Operateur : {{ provider_name }}
-Nature    : Lettre Recommandee Electronique (LRE)
-
-DATE LIMITE POUR ACCEPTER OU REFUSER
-------------------------------------
-{{ deadline_formatted }}
-
-CONSULTER VOTRE LETTRE RECOMMANDEE
-----------------------------------
-Cliquez sur le lien suivant ou copiez-le dans votre navigateur :
-
-{{ magic_link }}
-
-Une authentification sera requise pour acceder au contenu.
-
-NOTE DE CONFIDENTIALITE
------------------------
-Conformement a la reglementation, l'identite de l'expediteur et le contenu
-de l'envoi ne sont pas reveles dans cette notification. Ces informations
-seront accessibles apres votre authentification sur la plateforme securisee.
-
---------------------------------------------------------------------------------
-{{ provider_name }}
-Service de Lettre Recommandee Electronique Qualifiee conforme au reglement
-eIDAS et au CPCE.
-
-Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.
-
-Template v{{ template_version }}
-================================================================================
-{% else %}
-================================================================================
-{{ provider_name }} - Qualified Electronic Registered Delivery Service
+{{ provider_name }} - {{ _('email.service_tagline') }}
 ================================================================================
 
 {{ legal_nature }}
 
 --------------------------------------------------------------------------------
 
-Hello,
+{{ _('email.greeting') }}
 
-You have received an ELECTRONIC REGISTERED DELIVERY awaiting your action.
+{{ _('email.notification_body') | striptags }}
 
-DELIVERY INFORMATION
---------------------
-Reference : {{ delivery_ref }}
-Provider  : {{ provider_name }}
-Type      : Qualified Electronic Registered Delivery
+{{ _('email.delivery_info_title') | upper }}
+{{ '-' * (_('email.delivery_info_title') | length) }}
+{{ _('email.reference_label') }} : {{ delivery_ref }}
+{{ _('email.provider_label') }} : {{ provider_name }}
+{{ _('email.nature_label') }}    : {{ _('email.nature_value') }}
 
-DEADLINE TO ACCEPT OR REFUSE
-----------------------------
+{{ _('email.deadline_title') | upper }}
+{{ '-' * (_('email.deadline_title') | length) }}
 {{ deadline_formatted }}
 
-VIEW YOUR REGISTERED DELIVERY
------------------------------
-Click the following link or copy it into your browser:
-
+{{ _('email.view_delivery_button') | upper }}
+{{ '-' * (_('email.view_delivery_button') | length) }}
 {{ magic_link }}
 
-Authentication will be required to access the content.
+{{ _('email.auth_note') }}
 
-PRIVACY NOTICE
---------------
-In accordance with regulations, the sender's identity and delivery content
-are not disclosed in this notification. This information will be accessible
-after you authenticate on the secure platform.
+{{ _('email.privacy_notice_title') | upper }}
+{{ '-' * (_('email.privacy_notice_title') | length) }}
+{{ _('email.privacy_notice_body') }}
 
 --------------------------------------------------------------------------------
 {{ provider_name }}
-Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.
+{{ _('email.footer_compliance') }}
 
-This email was sent automatically. Please do not reply.
+{{ _('email.footer_auto_email') }}
 
 Template v{{ template_version }}
 ================================================================================
-{% endif %}

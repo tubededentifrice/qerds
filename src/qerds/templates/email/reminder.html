@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if lang == 'fr' %}Rappel - Lettre Recommandee en attente{% else %}Reminder - Pending Registered Delivery{% endif %}</title>
+    <title>{{ _('email.reminder_title') }} - {{ _('email.reminder_subtitle') }}</title>
     <style>
         /* Email-safe CSS */
         body {
@@ -170,21 +170,13 @@
     <div class="email-container">
         <!-- Header -->
         <div class="email-header">
-            <h1>{% if lang == 'fr' %}RAPPEL{% else %}REMINDER{% endif %}</h1>
-            {% if lang == 'fr' %}
-            <p>Lettre Recommandee Electronique en attente</p>
-            {% else %}
-            <p>Pending Electronic Registered Delivery</p>
-            {% endif %}
+            <h1>{{ _('email.reminder_title') }}</h1>
+            <p>{{ _('email.reminder_subtitle') }}</p>
         </div>
 
         <!-- Urgency banner -->
         <div class="urgency-banner">
-            {% if lang == 'fr' %}
-            <p>Action requise dans {{ days_remaining }} jour{% if days_remaining > 1 %}s{% endif %}</p>
-            {% else %}
-            <p>Action required within {{ days_remaining }} day{% if days_remaining > 1 %}s{% endif %}</p>
-            {% endif %}
+            <p>{{ _('email.action_required', days=days_remaining) }}</p>
         </div>
 
         <!-- Body -->
@@ -195,32 +187,17 @@
             </div>
 
             <!-- Greeting -->
-            {% if lang == 'fr' %}
-            <p>Bonjour,</p>
-            <p>
-                Nous vous rappelons qu'une <strong>lettre recommandee electronique</strong>
-                est en attente de votre action. <strong>La date limite approche.</strong>
-            </p>
-            {% else %}
-            <p>Hello,</p>
-            <p>
-                This is a reminder that an <strong>electronic registered delivery</strong>
-                is awaiting your action. <strong>The deadline is approaching.</strong>
-            </p>
-            {% endif %}
+            <p>{{ _('email.greeting') }}</p>
+            <p>{{ _('email.reminder_body') }}</p>
 
             <!-- Delivery information -->
             <div class="delivery-info">
-                {% if lang == 'fr' %}
-                <h2>Informations de l'envoi</h2>
-                {% else %}
-                <h2>Delivery Information</h2>
-                {% endif %}
+                <h2>{{ _('email.delivery_info_title') }}</h2>
 
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a; width: 140px;">
-                            {% if lang == 'fr' %}Reference{% else %}Reference{% endif %}
+                            {{ _('email.reference_label') }}
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
                             <code style="background: #f0f0f5; padding: 4px 8px; border-radius: 4px; font-family: monospace;">{{ delivery_ref }}</code>
@@ -228,7 +205,7 @@
                     </tr>
                     <tr>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #3a3a3a;">
-                            {% if lang == 'fr' %}Operateur{% else %}Provider{% endif %}
+                            {{ _('email.provider_label') }}
                         </td>
                         <td style="padding: 12px 0; border-bottom: 1px solid #e5e5e5; color: #1a1a1a;">
                             {{ provider_name }}
@@ -239,82 +216,39 @@
 
             <!-- Deadline warning -->
             <div class="deadline-box">
-                {% if lang == 'fr' %}
-                <h3>Date limite pour accepter ou refuser</h3>
-                {% else %}
-                <h3>Deadline to accept or refuse</h3>
-                {% endif %}
+                <h3>{{ _('email.deadline_title') }}</h3>
                 <div class="deadline-date">{{ deadline_formatted }}</div>
-                <div class="days-remaining">
-                    {% if lang == 'fr' %}
-                    {{ days_remaining }} jour{% if days_remaining > 1 %}s{% endif %} restant{% if days_remaining > 1 %}s{% endif %}
-                    {% else %}
-                    {{ days_remaining }} day{% if days_remaining > 1 %}s{% endif %} remaining
-                    {% endif %}
-                </div>
+                <div class="days-remaining">{{ _('email.days_remaining', days=days_remaining) }}</div>
             </div>
 
             <!-- Call to action -->
             <div class="action-section">
                 <a href="{{ magic_link }}" class="action-button">
-                    {% if lang == 'fr' %}Agir maintenant{% else %}Take action now{% endif %}
+                    {{ _('email.action_now_button') }}
                 </a>
                 <p class="action-note">
-                    {% if lang == 'fr' %}
-                    Une authentification sera requise pour acceder au contenu.
-                    {% else %}
-                    Authentication will be required to access the content.
-                    {% endif %}
+                    {{ _('email.auth_note') }}
                 </p>
             </div>
 
             <!-- Expiry warning -->
             <div class="expiry-warning">
-                {% if lang == 'fr' %}
-                <h4>Important : que se passe-t-il si je n'agis pas ?</h4>
-                <p>
-                    Si vous n'acceptez ni ne refusez cette lettre avant la date limite,
-                    elle sera consideree comme "negligee" conformement a la loi.
-                    L'expediteur sera informe que vous n'avez pas retire l'envoi.
-                </p>
-                {% else %}
-                <h4>Important: What happens if I don't act?</h4>
-                <p>
-                    If you neither accept nor refuse this delivery before the deadline,
-                    it will be marked as "expired" in accordance with the law.
-                    The sender will be notified that you did not collect the delivery.
-                </p>
-                {% endif %}
+                <h4>{{ _('email.expiry_warning_title') }}</h4>
+                <p>{{ _('email.expiry_warning_body') }}</p>
             </div>
 
             <!-- Privacy notice -->
             <div class="privacy-notice">
-                {% if lang == 'fr' %}
-                <h4>Note de confidentialite</h4>
-                <p>
-                    Conformement a la reglementation, l'identite de l'expediteur et le contenu
-                    ne sont pas reveles dans cette notification.
-                </p>
-                {% else %}
-                <h4>Privacy Notice</h4>
-                <p>
-                    In accordance with regulations, the sender's identity and content
-                    are not disclosed in this notification.
-                </p>
-                {% endif %}
+                <h4>{{ _('email.privacy_notice_title') }}</h4>
+                <p>{{ _('email.privacy_notice_body') }}</p>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="email-footer">
             <p class="provider-name">{{ provider_name }}</p>
-            {% if lang == 'fr' %}
-            <p>Service de Lettre Recommandee Electronique Qualifiee conforme au reglement eIDAS et au CPCE.</p>
-            <p>Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.</p>
-            {% else %}
-            <p>Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.</p>
-            <p>This email was sent automatically. Please do not reply.</p>
-            {% endif %}
+            <p>{{ _('email.footer_compliance') }}</p>
+            <p>{{ _('email.footer_auto_email') }}</p>
             <p style="font-size: 11px; color: #999999; margin-top: 16px;">
                 Template v{{ template_version }}
             </p>

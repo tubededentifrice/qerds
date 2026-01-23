@@ -533,6 +533,7 @@ class TestCompleteAcceptFlow:
 
         mock_sealed = SealedEvidence(
             evidence_id=f"evd-{uuid4()}",
+            format_version="ETSI-EN-319-522-4-1:2024-01",
             payload={
                 "delivery_id": str(delivery_id),
                 "event_type": "evt_deposited",

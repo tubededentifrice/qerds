@@ -43,6 +43,8 @@ from urllib.parse import urlencode
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+from qerds.api.i18n import create_translator
+
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -559,8 +561,12 @@ class EmailNotificationService:
         """
         template = self._env.get_template("notification.html")
 
+        # Create translator function for this language
+        translator = create_translator(lang)
+
         context = {
             "lang": lang,
+            "_": translator,
             "provider_name": self.provider_name,
             "delivery_ref": delivery_ref,
             "deadline": deadline,
@@ -603,8 +609,12 @@ class EmailNotificationService:
         """
         template = self._env.get_template("reminder.html")
 
+        # Create translator function for this language
+        translator = create_translator(lang)
+
         context = {
             "lang": lang,
+            "_": translator,
             "provider_name": self.provider_name,
             "delivery_ref": delivery_ref,
             "deadline": deadline,

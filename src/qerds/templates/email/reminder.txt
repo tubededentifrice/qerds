@@ -1,112 +1,48 @@
-{% if lang == 'fr' %}
 ================================================================================
-RAPPEL - {{ provider_name }}
+{{ _('email.reminder_title') }} - {{ provider_name }}
 ================================================================================
 
-*** ACTION REQUISE DANS {{ days_remaining }} JOUR{% if days_remaining > 1 %}S{% endif %} ***
+*** {{ _('email.action_required', days=days_remaining) | upper }} ***
 
 {{ legal_nature }}
 
 --------------------------------------------------------------------------------
 
-Bonjour,
+{{ _('email.greeting') }}
 
-Nous vous rappelons qu'une LETTRE RECOMMANDEE ELECTRONIQUE est en attente
-de votre action. LA DATE LIMITE APPROCHE.
+{{ _('email.reminder_body') | striptags }}
 
-INFORMATIONS DE L'ENVOI
------------------------
-Reference : {{ delivery_ref }}
-Operateur : {{ provider_name }}
-Nature    : Lettre Recommandee Electronique (LRE)
+{{ _('email.delivery_info_title') | upper }}
+{{ '-' * (_('email.delivery_info_title') | length) }}
+{{ _('email.reference_label') }} : {{ delivery_ref }}
+{{ _('email.provider_label') }} : {{ provider_name }}
+{{ _('email.nature_label') }}    : {{ _('email.nature_value') }}
 
-DATE LIMITE POUR ACCEPTER OU REFUSER
-------------------------------------
+{{ _('email.deadline_title') | upper }}
+{{ '-' * (_('email.deadline_title') | length) }}
 {{ deadline_formatted }}
 
->>> {{ days_remaining }} JOUR{% if days_remaining > 1 %}S{% endif %} RESTANT{% if days_remaining > 1 %}S{% endif %} <<<
+>>> {{ _('email.days_remaining', days=days_remaining) | upper }} <<<
 
-AGIR MAINTENANT
----------------
-Cliquez sur le lien suivant ou copiez-le dans votre navigateur :
-
+{{ _('email.action_now_button') | upper }}
+{{ '-' * (_('email.action_now_button') | length) }}
 {{ magic_link }}
 
-Une authentification sera requise pour acceder au contenu.
+{{ _('email.auth_note') }}
 
-IMPORTANT : QUE SE PASSE-T-IL SI JE N'AGIS PAS ?
-------------------------------------------------
-Si vous n'acceptez ni ne refusez cette lettre avant la date limite,
-elle sera consideree comme "negligee" conformement a la loi.
-L'expediteur sera informe que vous n'avez pas retire l'envoi.
+{{ _('email.expiry_warning_title') | upper }}
+{{ '-' * (_('email.expiry_warning_title') | length) }}
+{{ _('email.expiry_warning_body') }}
 
-NOTE DE CONFIDENTIALITE
------------------------
-Conformement a la reglementation, l'identite de l'expediteur et le contenu
-ne sont pas reveles dans cette notification.
+{{ _('email.privacy_notice_title') | upper }}
+{{ '-' * (_('email.privacy_notice_title') | length) }}
+{{ _('email.privacy_notice_body') }}
 
 --------------------------------------------------------------------------------
 {{ provider_name }}
-Service de Lettre Recommandee Electronique Qualifiee conforme au reglement
-eIDAS et au CPCE.
+{{ _('email.footer_compliance') }}
 
-Cet e-mail a ete envoye automatiquement. Merci de ne pas y repondre.
-
-Template v{{ template_version }}
-================================================================================
-{% else %}
-================================================================================
-REMINDER - {{ provider_name }}
-================================================================================
-
-*** ACTION REQUIRED WITHIN {{ days_remaining }} DAY{% if days_remaining > 1 %}S{% endif %} ***
-
-{{ legal_nature }}
-
---------------------------------------------------------------------------------
-
-Hello,
-
-This is a reminder that an ELECTRONIC REGISTERED DELIVERY is awaiting
-your action. THE DEADLINE IS APPROACHING.
-
-DELIVERY INFORMATION
---------------------
-Reference : {{ delivery_ref }}
-Provider  : {{ provider_name }}
-Type      : Qualified Electronic Registered Delivery
-
-DEADLINE TO ACCEPT OR REFUSE
-----------------------------
-{{ deadline_formatted }}
-
->>> {{ days_remaining }} DAY{% if days_remaining > 1 %}S{% endif %} REMAINING <<<
-
-TAKE ACTION NOW
----------------
-Click the following link or copy it into your browser:
-
-{{ magic_link }}
-
-Authentication will be required to access the content.
-
-IMPORTANT: WHAT HAPPENS IF I DON'T ACT?
----------------------------------------
-If you neither accept nor refuse this delivery before the deadline,
-it will be marked as "expired" in accordance with the law.
-The sender will be notified that you did not collect the delivery.
-
-PRIVACY NOTICE
---------------
-In accordance with regulations, the sender's identity and content
-are not disclosed in this notification.
-
---------------------------------------------------------------------------------
-{{ provider_name }}
-Qualified Electronic Registered Delivery Service compliant with eIDAS regulation.
-
-This email was sent automatically. Please do not reply.
+{{ _('email.footer_auto_email') }}
 
 Template v{{ template_version }}
 ================================================================================
-{% endif %}

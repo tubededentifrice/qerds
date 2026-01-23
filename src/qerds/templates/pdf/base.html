@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="generator" content="QERDS PDF Generator v{{ generator_version }}">
-    <title>{% block title %}Document QERDS{% endblock %}</title>
+    <title>{% block title %}{{ _('pdf.document_title') }}{% endblock %}</title>
     <style>
         {% block inline_styles %}
         /* Base PDF styles - A4 format with proper margins */
@@ -18,13 +18,13 @@
             }
 
             @bottom-left {
-                content: "QERDS - {% if is_qualified %}Service Qualifie eIDAS{% else %}Mode developpement - Non qualifie{% endif %}";
+                content: "QERDS - {% if is_qualified %}{{ _('pdf.qualified_service_eidas') }}{% else %}{{ _('pdf.dev_mode_title') }}{% endif %}";
                 font-size: 8pt;
                 color: #666666;
             }
 
             @bottom-right {
-                content: "Page " counter(page) " / " counter(pages);
+                content: "{{ _('pdf.page') }} " counter(page) " {{ _('pdf.of') }} " counter(pages);
                 font-size: 8pt;
                 color: #666666;
             }
@@ -59,17 +59,17 @@
             </div>
             <div class="brand-text">
                 <span class="brand-name">QERDS</span>
-                <span class="brand-tagline">Lettre Recommandee Electronique {% if is_qualified %}Qualifiee{% else %}(Dev){% endif %}</span>
+                <span class="brand-tagline">{% if is_qualified %}{{ _('pdf.lre_subtitle_qualified') }}{% else %}{{ _('pdf.lre_subtitle_dev') }}{% endif %}</span>
             </div>
         </div>
         <div class="header-qualification">
             {% if is_qualified %}
             <span class="qualification-badge qualification-badge--qualified">
-                Service Qualifie eIDAS
+                {{ _('pdf.qualified_service_eidas') }}
             </span>
             {% else %}
             <span class="qualification-badge qualification-badge--dev">
-                Mode developpement - Non qualifie
+                {{ _('pdf.dev_mode_title') }}
             </span>
             {% endif %}
         </div>
@@ -84,14 +84,12 @@
     <footer class="document-footer">
         <div class="footer-legal">
             <p class="footer-verification">
-                Ce document a ete genere le {{ generated_at|format_datetime }}.
+                {{ _('pdf.generated_on') }} {{ generated_at|format_datetime }}.
                 {% block verification_info %}{% endblock %}
             </p>
             {% if not is_qualified %}
             <p class="footer-warning">
-                <strong>ATTENTION :</strong> Ce document a ete genere en mode developpement
-                et n'a pas de valeur juridique. Il ne constitue pas une preuve qualifiee
-                au sens du reglement eIDAS.
+                {{ _('pdf.dev_warning') }}
             </p>
             {% endif %}
         </div>

@@ -27,8 +27,9 @@ from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from qerds.api.i18n import get_error_message, get_language
 from qerds.api.middleware.auth import AuthenticatedUser, optional_authenticated_user
 from qerds.api.templates import build_template_context, get_templates
 from qerds.db.models.base import DeliveryState, IALLevel
@@ -235,9 +236,10 @@ async def pickup_portal(
             return templates.TemplateResponse("recipient/error.html", ctx)
 
         except DeliveryNotFoundError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Delivery not found",
+                detail=get_error_message("delivery_not_found", lang),
             ) from exc
 
         except DeliveryExpiredError:
@@ -251,9 +253,10 @@ async def pickup_portal(
 
         except RecipientMismatchError as exc:
             # Authenticated user is not the recipient
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the recipient of this delivery",
+                detail=get_error_message("not_recipient", lang),
             ) from exc
 
         # Get full pickup context with auth status
@@ -408,36 +411,39 @@ async def accept_delivery(
             )
 
         except RecipientMismatchError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the recipient of this delivery",
+                detail=get_error_message("not_recipient", lang),
             ) from exc
 
         except InsufficientIALError as e:
             # IAL level too low for LRE
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Identity assurance level {e.actual.value} is insufficient. "
-                f"LRE requires at least {e.required.value}. "
-                "Please re-authenticate with FranceConnect+.",
+                detail=get_error_message("ial_insufficient", lang),
             ) from e
 
         except ConsentRequiredError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Electronic delivery consent is required for LRE recipients",
+                detail=get_error_message("consent_required", lang),
             ) from exc
 
         except DeliveryExpiredError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
-                detail="The acceptance deadline has passed",
+                detail=get_error_message("deadline_passed", lang),
             ) from exc
 
         except InvalidStateError as e:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot accept delivery in state {e.current_state.value}",
+                detail=get_error_message("invalid_state", lang),
             ) from e
 
 
@@ -514,29 +520,31 @@ async def refuse_delivery(
             )
 
         except RecipientMismatchError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the recipient of this delivery",
+                detail=get_error_message("not_recipient", lang),
             ) from exc
 
         except InsufficientIALError as e:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Identity assurance level {e.actual.value} is insufficient. "
-                f"LRE requires at least {e.required.value}. "
-                "Please re-authenticate with FranceConnect+.",
+                detail=get_error_message("ial_insufficient", lang),
             ) from e
 
         except DeliveryExpiredError as exc:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
-                detail="The acceptance deadline has passed",
+                detail=get_error_message("deadline_passed", lang),
             ) from exc
 
         except InvalidStateError as e:
+            lang = get_language(request)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot refuse delivery in state {e.current_state.value}",
+                detail=get_error_message("invalid_state", lang),
             ) from e
 
 
@@ -558,24 +566,50 @@ async def refuse_delivery(
     - EVT_CONTENT_ACCESSED evidence event is recorded
     - Delivery may transition to RECEIVED state
     """,
+    responses={
+        200: {
+            "content": {"application/octet-stream": {}},
+            "description": "Content file (decrypted)",
+        },
+        403: {"description": "Content not yet accessible (requires acceptance)"},
+        404: {"description": "Delivery or content not found"},
+    },
 )
 async def download_content(
+    request: Request,
     delivery_id: UUID,
+    content_index: Annotated[int, Query(ge=0, description="Content object index")] = 0,
     user: Annotated[AuthenticatedUser | None, Depends(optional_authenticated_user)] = None,
-) -> RedirectResponse:
+) -> Response:
     """Download delivery content (post-acceptance only).
 
     This endpoint enforces the critical REQ-E02 requirement:
     content access is only allowed after acceptance.
+
+    Args:
+        request: The HTTP request.
+        delivery_id: UUID of the delivery.
+        content_index: Index of the content object to download (default: 0).
+        user: Authenticated user (optional auth for redirect).
+
+    Returns:
+        Decrypted content file response.
     """
-    # Authentication wall
+    # Authentication wall - redirect to auth if not authenticated
     if not user:
         return RedirectResponse(
             url=f"/pickup/{delivery_id}/auth",
             status_code=status.HTTP_302_FOUND,
         )
 
+    from qerds.core.settings import get_settings
     from qerds.db import get_async_session
+    from qerds.db.models.base import ActorType
+    from qerds.services.content_encryption import get_content_encryption_service
+    from qerds.services.evidence import ActorIdentification, EvidenceService
+    from qerds.services.storage import Buckets, ObjectStoreClient
+
+    lang = get_language(request)
 
     async with get_async_session() as db_session:
         service = PickupService(db_session)
@@ -586,32 +620,157 @@ async def download_content(
                 authenticated_party_id=user.principal_id,
                 ial_level=_get_ial_from_user(user),
             )
+            delivery = context.delivery
 
             # CRITICAL: Enforce post-acceptance content access (REQ-E02)
-            if context.delivery.state != DeliveryState.ACCEPTED:
+            if delivery.state != DeliveryState.ACCEPTED:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Content download is only available after accepting the delivery",
+                    detail=get_error_message("content_after_accept_only", lang),
                 )
 
-            # TODO: Implement actual content retrieval from object store
-            # For now, return a placeholder response
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="Content download not yet implemented",
+            # Verify content objects exist
+            if not delivery.content_objects:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=get_error_message("delivery_not_found", lang),
+                )
+
+            # Get the requested content object by index
+            if content_index >= len(delivery.content_objects):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=get_error_message("delivery_not_found", lang),
+                )
+            content_object = delivery.content_objects[content_index]
+
+            # Retrieve encrypted content from object store
+            settings = get_settings()
+            storage = ObjectStoreClient.from_settings(settings.s3)
+
+            try:
+                encrypted_bytes, _metadata = storage.download(
+                    bucket=Buckets.CONTENT,
+                    key=content_object.storage_key,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to retrieve content from object store",
+                    extra={
+                        "delivery_id": str(delivery_id),
+                        "content_object_id": str(content_object.content_object_id),
+                        "storage_key": content_object.storage_key,
+                        "error": str(e),
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=get_error_message("storage_retrieval_failed", lang),
+                ) from e
+
+            # Decrypt content if encryption metadata is present (REQ-E01)
+            plaintext = encrypted_bytes
+            if content_object.encryption_metadata:
+                try:
+                    encryption_service = await get_content_encryption_service()
+                    plaintext = await encryption_service.decrypt_content_object(
+                        ciphertext=encrypted_bytes,
+                        encryption_metadata=content_object.encryption_metadata,
+                        delivery_id=delivery_id,
+                        content_object_id=content_object.content_object_id,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to decrypt content",
+                        extra={
+                            "delivery_id": str(delivery_id),
+                            "content_object_id": str(content_object.content_object_id),
+                            "error": str(e),
+                        },
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=get_error_message("decryption_failed", lang),
+                    ) from e
+
+            # Record EVT_CONTENT_ACCESSED evidence event (REQ-E02, REQ-H10)
+            # This provides audit trail of who accessed content and when
+            try:
+                evidence_service = EvidenceService(db_session)
+                actor = ActorIdentification(
+                    actor_type=ActorType.RECIPIENT,
+                    actor_ref=str(user.principal_id),
+                )
+                await evidence_service.record_content_access(
+                    delivery_id=delivery_id,
+                    actor=actor,
+                    content_object_ids=[content_object.content_object_id],
+                    access_type="download",
+                    event_metadata={
+                        "ip_address_hash": _hash_ip(_get_client_ip(request)),
+                        "session_ref": str(user.session_id) if user.session_id else None,
+                        "content_index": content_index,
+                    },
+                )
+                await db_session.commit()
+            except Exception as e:
+                # Log but don't fail the download - evidence is important but not blocking
+                logger.warning(
+                    "Failed to record content access event",
+                    extra={
+                        "delivery_id": str(delivery_id),
+                        "content_object_id": str(content_object.content_object_id),
+                        "error": str(e),
+                    },
+                )
+
+            logger.info(
+                "Recipient downloaded content",
+                extra={
+                    "delivery_id": str(delivery_id),
+                    "content_object_id": str(content_object.content_object_id),
+                    "recipient_id": str(user.principal_id),
+                    "content_index": content_index,
+                },
+            )
+
+            # Return decrypted content with original filename
+            filename = (
+                content_object.original_filename or f"document_{content_object.content_object_id}"
+            )
+            return Response(
+                content=plaintext,
+                media_type=content_object.mime_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
         except DeliveryNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Delivery not found",
+                detail=get_error_message("delivery_not_found", lang),
             ) from exc
 
         except RecipientMismatchError as exc:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the recipient of this delivery",
+                detail=get_error_message("not_recipient", lang),
             ) from exc
+
+
+def _hash_ip(ip_address: str | None) -> str | None:
+    """Hash IP address for privacy-preserving audit logging.
+
+    Args:
+        ip_address: The IP address.
+
+    Returns:
+        First 16 chars of SHA-256 hash, or None if no IP.
+    """
+    if not ip_address:
+        return None
+    import hashlib
+
+    return hashlib.sha256(ip_address.encode()).hexdigest()[:16]
 
 
 def _get_client_ip(request: Request) -> str | None:
