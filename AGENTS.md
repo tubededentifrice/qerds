@@ -139,7 +139,7 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd export               # Export issues for git
 bd create "Title"     # Create new issue
 ```
 
@@ -149,7 +149,7 @@ bd create "Title"     # Create new issue
 3. Complete the work
 4. Run tests and linters
 5. Close with `bd close <id>`
-6. Sync with `bd sync`
+6. Export with `bd export`
 
 ## Compliance Guardrail
 
@@ -178,7 +178,7 @@ Do **not** claim QERDS/LRE qualification unless *all* normative requirements are
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd export
    git push
    git status  # MUST show "up to date with origin"
    ```
