@@ -48,7 +48,7 @@ When there’s any non-obvious decision or uncertainty (architecture, security m
 - **Documentation follows code**: Don't duplicate info in docs that exists in code; reference it instead
 - **Three strikes rule**: If a pattern appears 3+ times, refactor immediately (don't file an issue, fix it now)
 - **Cross-cutting concerns**: Auth, logging, validation should use decorators/middleware, not inline repetition
-- After a large change, run `jscpd --silent src`. Merge the duplicates that the change adds. Do not make jscpd a gate.
+- `make check` also reports jscpd clones for the changed files. Fix the clones that your change adds when the fix makes the code simpler.
 
 ### Test Coverage
 - **Minimum**: 80% overall coverage required

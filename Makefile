@@ -3,7 +3,7 @@
 
 .PHONY: help install lint format typecheck test test-cov clean check-traceability \
        test-env-up test-env-down test-env-status test-docker test-docker-cov \
-       check-network check-network-prod check-boundaries
+       check-network check-network-prod check-boundaries report-duplicates
 
 # Default target
 help:
@@ -64,7 +64,16 @@ test-cov:
 	pytest --cov --cov-report=term-missing --cov-report=html
 
 # Combined quality gate
-check: lint format-check typecheck test
+check: lint format-check typecheck test report-duplicates
+
+# Report copied code in the changed files. This report does not fail the check.
+report-duplicates:
+	-@if command -v jscpd >/dev/null; then \
+	  jscpd --changed --baseline "$$(git rev-parse --git-dir)/jscpd-baseline.json" \
+	    --reporters ai --no-colors src || true; \
+	else \
+	  echo "jscpd is not installed: no duplicate report."; \
+	fi
 
 # Docker targets (for CI/CD and reproducible builds)
 docker-lint:
