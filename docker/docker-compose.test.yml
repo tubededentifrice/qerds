@@ -10,9 +10,9 @@
 #   TEST_S3_SECRET_KEY=qerds_minio_secret
 
 services:
-  # PostgreSQL 18 - Test database (separate from dev database)
+  # PostgreSQL 19 - Test database (separate from dev database)
   postgres-test:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     environment:
       POSTGRES_DB: qerds_test
       POSTGRES_USER: qerds

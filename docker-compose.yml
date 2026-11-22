@@ -2,7 +2,7 @@
 # Run with: docker compose up
 #
 # Services:
-#   - postgres: PostgreSQL 18 database
+#   - postgres: PostgreSQL 19 database
 #   - minio: S3-compatible object storage
 #   - mailpit: Email testing (SMTP + Web UI)
 #   - mocks: UI mockups server
@@ -12,7 +12,7 @@
 #     - domibus: AS4 Message Service Handler (ETSI EN 319 522 interoperability)
 #     - domibus-mysql: MySQL 5.7 database for Domibus (AS4 gateway only)
 #     - smp: phoss SMP for BDXR/Peppol metadata publishing
-#     - smp-postgres: PostgreSQL 18 database for phoss SMP
+#     - smp-postgres: PostgreSQL 19 database for phoss SMP
 #   - security-tools: Enable with: docker compose --profile security-tools up
 #     - registry: Internal OCI registry for air-gapped tooling
 #
@@ -40,9 +40,9 @@ services:
   # Core Infrastructure Services
   # --------------------------------------------------------------------------
 
-  # PostgreSQL 18 - Primary database for state, evidence indexing, audit metadata
+  # PostgreSQL 19 - Primary database for state, evidence indexing, audit metadata
   postgres:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     environment:
       POSTGRES_DB: qerds
       POSTGRES_USER: qerds
@@ -174,10 +174,10 @@ services:
   # See: smp/README.md for setup instructions
   # --------------------------------------------------------------------------
 
-  # PostgreSQL 18 - Database for phoss SMP (separate from QERDS PostgreSQL)
+  # PostgreSQL 19 - Database for phoss SMP (separate from QERDS PostgreSQL)
   # phoss SMP supports PostgreSQL 13/14+ with Flyway migrations
   smp-postgres:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     profiles: ["interop"]
     environment:
       POSTGRES_DB: smp
@@ -203,6 +203,9 @@ services:
     environment:
       # Configuration file location
       CONFIG_FILE: /config/application.properties
+      WEBAPP_DATAPATH: /home/git/conf
+      JDBC_DATABASE_TYPE: PostgreSQL
+      SMP_FLYWAY_JDBC_SCHEMA_CREATE: "true"
       # Java memory settings
       JAVA_OPTS: "-Xms256m -Xmx512m"
       # Pass database password to application.properties
@@ -222,8 +225,16 @@ services:
       smp-postgres:
         condition: service_healthy
     healthcheck:
-      # Check SMP status endpoint is responding
-      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      # The image has Bash but does not include curl.
+      test:
+        - CMD
+        - bash
+        - -ec
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/8080
+          printf 'GET /smp-ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3
+          read -r protocol status rest <&3
+          test "$$status" = 200
       interval: 30s
       timeout: 10s
       retries: 5

@@ -48,10 +48,10 @@ docker compose --profile interop logs smp
 ## Components
 
 - **smp**: phoss SMP server (Tomcat 10.1 + JDK 17)
-- **smp-postgres**: PostgreSQL 18 database for SMP metadata (separate from QERDS PostgreSQL)
+- **smp-postgres**: PostgreSQL 19 database for SMP metadata (separate from QERDS PostgreSQL)
 
-For an upgrade from 16, stop writers and back up each database separately.
-Keep both old volumes. Restore each dump into a separate PostgreSQL 18 volume
+For an upgrade from 16 or 18, stop writers and back up each database separately.
+Keep both old volumes. Restore each dump into a separate PostgreSQL 19 volume
 and verify both services before you resume writes.
 
 ## Configuration Files
