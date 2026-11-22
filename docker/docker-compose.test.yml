@@ -10,9 +10,9 @@
 #   TEST_S3_SECRET_KEY=qerds_minio_secret
 
 services:
-  # PostgreSQL 16 - Test database (separate from dev database)
+  # PostgreSQL 18 - Test database (separate from dev database)
   postgres-test:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: qerds_test
       POSTGRES_USER: qerds
@@ -22,7 +22,7 @@ services:
       - "127.0.0.1:5433:5432"
     # Use tmpfs for test data to ensure fast cleanup and isolation
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U qerds -d qerds_test"]
       interval: 5s

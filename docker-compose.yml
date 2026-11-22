@@ -2,7 +2,7 @@
 # Run with: docker compose up
 #
 # Services:
-#   - postgres: PostgreSQL 16 database
+#   - postgres: PostgreSQL 18 database
 #   - minio: S3-compatible object storage
 #   - mailpit: Email testing (SMTP + Web UI)
 #   - mocks: UI mockups server
@@ -12,7 +12,7 @@
 #     - domibus: AS4 Message Service Handler (ETSI EN 319 522 interoperability)
 #     - domibus-mysql: MySQL 5.7 database for Domibus (AS4 gateway only)
 #     - smp: phoss SMP for BDXR/Peppol metadata publishing
-#     - smp-postgres: PostgreSQL 16 database for phoss SMP
+#     - smp-postgres: PostgreSQL 18 database for phoss SMP
 #   - security-tools: Enable with: docker compose --profile security-tools up
 #     - registry: Internal OCI registry for air-gapped tooling
 #
@@ -40,15 +40,15 @@ services:
   # Core Infrastructure Services
   # --------------------------------------------------------------------------
 
-  # PostgreSQL 16 - Primary database for state, evidence indexing, audit metadata
+  # PostgreSQL 18 - Primary database for state, evidence indexing, audit metadata
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: qerds
       POSTGRES_USER: qerds
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qerds_dev_password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     # Bind to localhost only per CLAUDE.md (not public IP 217.182.203.57)
     # Using 5434 to avoid conflict with other projects using 5432
     ports:
@@ -174,17 +174,17 @@ services:
   # See: smp/README.md for setup instructions
   # --------------------------------------------------------------------------
 
-  # PostgreSQL 16 - Database for phoss SMP (separate from QERDS PostgreSQL)
+  # PostgreSQL 18 - Database for phoss SMP (separate from QERDS PostgreSQL)
   # phoss SMP supports PostgreSQL 13/14+ with Flyway migrations
   smp-postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     profiles: ["interop"]
     environment:
       POSTGRES_DB: smp
       POSTGRES_USER: smp
       POSTGRES_PASSWORD: ${SMP_DB_PASSWORD:-smp_dev_password}
     volumes:
-      - smp_postgres_data:/var/lib/postgresql/data
+      - smp_postgres_data:/var/lib/postgresql
     # Internal only - no host port needed, accessed by smp container
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smp -d smp"]
